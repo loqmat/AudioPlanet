@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+    <title> Computer Graphics Project </title>
+    
+    <script id="vertex-shader" type="x-shader/x-vertex">
+    attribute vec4 vPosition;
+
+    void
+    main()
+    {
+        gl_Position = vPosition;
+    }
+    </script>
+
+    <script id="fragment-shader" type="x-shader/x-fragment">
+    precision mediump float;
+
+    void
+    main()
+    {
+        gl_FragColor = vec4(1,1,1,1);
+    }
+    </script>
+    
+    <script type="text/javascript" src="./lib/webgl-utils.js"></script>
+    <script type="text/javascript" src="./lib/initShaders.js"></script>
+    <script type="text/javascript" src="./lib/MV.js"></script>
+    <script type="text/javascript" src="./tetrahedron.js"></script>
+    <script type="text/javascript" src="./main.js"></script>
+    <link rel="stylesheet" type="text/css" href="main.css">
+</head>
+<body>
+    <input id="loadFile" type="file"/>
+    <canvas id="GLCanvas">
+        Oops ... your browser doesn't support the HTML5 canvas element
+    </canvas>
+</body>
+</html>
