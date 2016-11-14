@@ -111,30 +111,41 @@ function generatePTSphere(radius, latitudeBands, longitudeBands) {
     var vIndex = 0;
     var iIndex = 0;
     
-    vertexData[vIndex+0] = Math.PI / 2.0f;
-    vertexData[vIndex+1] = Math.PI / 2.0f;
+    vertexData[vIndex+0] = 0;
+    vertexData[vIndex+1] = 0;
     vertexData[vIndex+2] = 1;
     vertexData[vIndex+3] = 1;
     vIndex += 4;
     
-    vertexData[vIndex+0] = -Math.PI / 2.0f;
-    vertexData[vIndex+1] = -Math.PI / 2.0f;
+    vertexData[vIndex+0] = Math.PI;
+    vertexData[vIndex+1] = 0;
     vertexData[vIndex+2] = 0;
     vertexData[vIndex+3] = 0;
     vIndex += 4;
     
-    for (var lon = 0; lon < longitudeBands; lon++) {
-        var phi = lon * 2 * Math.PI / longitudeBands;
-        for (var lat = 1; lat <= latitudeBands; lat++) {
-            var theta = lat * Math.PI / (latitudeBands+1);
-            vertexData[vIndex+0] = theta;
-            vertexData[vIndex+1] = phi;
+    for (var lon = 0.0; lon < longitudeBands; lon++) {
+        var theta = lon * 2.0 * Math.PI / longitudeBands;
+        for (var lat = 1.0; lat <= latitudeBands; lat++) {
+            var phi = lat * Math.PI / (latitudeBands+1);
+            vertexData[vIndex+0] = phi;
+            vertexData[vIndex+1] = theta;
             vertexData[vIndex+2] = 1 - (lon / longitudeBands);
-            vertexData[vIndex+2] = 1 - (lat / latitudeBands);
-            pIndex += 4;
+            vertexData[vIndex+3] = 1 - (lat / latitudeBands);
+            vIndex += 4;
         }
     }
     
+    for (var lon = 0; lon < longitudeBands; lon++) {
+        indexData[iIndex+0] = 0;
+        indexData[iIndex+1] = 2 + ((lon + 1) % longitudeBands)*(latitudeBands);
+        indexData[iIndex+2] = 2 + lon*(latitudeBands);
+        iIndex += 3;
+        
+        indexData[iIndex+0] = 1;
+        indexData[iIndex+1] = 2 + (lon)*(latitudeBands) + longitudeBands - 1;
+        indexData[iIndex+2] = 2 + ((lon + 1) % longitudeBands)*(latitudeBands) + longitudeBands - 1;
+        iIndex += 3;
+    }
     for (var lon = 0; lon < longitudeBands; lon++) {
         var lon0 = 2 + lon*(latitudeBands);
         var lon1 = 2 + ((lon + 1) % longitudeBands)*(latitudeBands);

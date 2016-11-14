@@ -7,6 +7,8 @@
 var gl;
 var canvas;
 
+var displayPoints = false;
+
 var distance = 4;
 var rotation = translate(0,0,0);
 
@@ -53,7 +55,7 @@ function processAudio(unif, data) {
         
         var newA = data[i] / 255.0 * responseValue + bufferA[i*2+1] * (1.0-responseValue);
         var newB = height / 255.0 * responseValue + bufferB[i*2+1] * (1.0-responseValue);
-        var newC = height / 255.0;
+        var newC = responseValue * 0.25 * height / 255.0 + bufferC[i] * (1-responseValue);
         
         accum += bufferA[i*2+1] - newA;
         
@@ -62,9 +64,10 @@ function processAudio(unif, data) {
         bufferC[i]     = newC;
     }
     
+    gl.uniform1fv(unif, bufferC);
+    
     newVel = 0.75 * oldVel + 0.25 * accum;
     accel = Math.abs(newVel);//(newVel - oldVel) / 2.0;
-    console.log(accel);
     
     var phi = bufferIndex * 2 * Math.PI / lonBands;
     var sinPhi = Math.sin(phi);
@@ -108,18 +111,18 @@ function initWindow() {
     resizeCanvas();
     
     var mouseDown = false;
-    canvas.onmousedown = function(e) {
+    window.onmousedown = function(e) {
         if ( e.which == 1 )
             mouseDown = true;
     }
-    canvas.onmouseup = function(e) {
+    window.onmouseup = function(e) {
         if ( e.which == 1 )
             mouseDown = false;
     }
-    canvas.onmousemove = function(e) {
+    window.onmousemove = function(e) {
         if ( mouseDown ) {
-            var dx = scaleValue(e.movementX);
-            var dy = scaleValue(e.movementY);
+            var dx = scaleValue(e.movementX, 18.0, 18.0);
+            var dy = scaleValue(e.movementY, 18.0, 18.0);
             
             var qx = rotate(rad2deg(dx), vec3(0.0, 1.0, 0.0));
             var qy = rotate(rad2deg(dy), vec3(1.0, 0.0, 0.0));
@@ -130,7 +133,6 @@ function initWindow() {
     }
     canvas.onwheel = function(e) {
         var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-        console.log(delta);
         distance = Math.max( 1.5, Math.min(10, distance - delta));
     }
     
@@ -142,6 +144,8 @@ function initWindow() {
         }
         else if(event.keyCode == 39) {
             alert('Right was pressed');
+        } else if ( event.keyCode == 32 ) {
+            displayPoints = !displayPoints;
         }
     });
 }
@@ -180,6 +184,9 @@ function initGL() {
     gl.blendEquation(gl.FUNC_SUBTRACT);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+    
     ElementIndexUint = gl.getExtension("OES_element_index_uint");
     VertexArrayObjects = gl.getExtension("OES_vertex_array_object");
 
@@ -204,7 +211,7 @@ function initGL() {
     projectionMatrixLoc = gl.getUniformLocation( sphereProgram, "projectionMatrix" );
     nMatrixLoc = gl.getUniformLocation( sphereProgram, "normalMatrix" );
     
-    var sphereData = generateUVSphere(0.1,latBands,lonBands);
+    var sphereData = generatePTSphere(0.1,latBands,lonBands);
     
     sphereVertex = gl.createBuffer();
     sphereIndex = gl.createBuffer();
@@ -216,22 +223,40 @@ function initGL() {
     gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, sphereData[1], gl.STATIC_DRAW );
     
     sp_pos = gl.getAttribLocation( sphereProgram, "vPosition" );
-    sp_color = gl.getAttribLocation( sphereProgram, "vColor" );
     sp_uv = gl.getAttribLocation( sphereProgram, "vUV" );
-    sp_norm = gl.getAttribLocation( sphereProgram, "vNormal" );
+    sp_audio_bumps = gl.getUniformLocation( sphereProgram, "audioBumps" );
+    
+    var buffer = new Float32Array(3072);
+    for ( var i=0;i<1024;i++ ) {
+        var w = 0;
+        while ( w == 0 ) {
+            var x = Math.random() * 2.0 - 1.0;
+            var y = Math.random() * 2.0 - 1.0;
+            var z = Math.random() * 2.0 - 1.0;
+            
+            w = Math.sqrt(x*x + y*y + z*z);
+            
+            buffer[i*3+0] = x / w;
+            buffer[i*3+1] = y / w;
+            buffer[i*3+2] = z / w;
+            
+            console.log(buffer[i*3+0], buffer[i*3+1], buffer[i*3+2]);
+        }
+    }
+    
+    gl.uniform3fv(sp_audio_bumps, buffer);
     
     function runProgram() {
         gl.clear( gl.COLOR_BUFFER_BIT );
         
         drawWave();
-        
         drawSphere();
         
         window.requestAnimationFrame(runProgram);
     }
     
     window.requestAnimationFrame(runProgram);
-    return gl.getUniformLocation( program, "audioData" );
+    return gl.getUniformLocation( sphereProgram, "audioData" );
 }
 
 function drawWave() {
@@ -254,7 +279,7 @@ function drawWave() {
     */
     
     ///*
-    gl.uniform4f(u_color, 0, 0.9, 0, 1);
+    gl.uniform4f(u_color, 1.0, 0.65, 0.8, 1);
     gl.bufferSubData( gl.ARRAY_BUFFER, 0, bufferB );
     gl.drawArrays( gl.POINTS, 0, bufferA.length / 2 );
     //*/
@@ -278,30 +303,20 @@ function drawSphere() {
     gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertex );
     gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndex );
     
-    var indexPos = 24 + ((bufferIndex+latBands-1)%latBands) * lonBands * 12;
-    var indexCol = 24 + ((bufferIndex+latBands-1)%latBands) * lonBands * 12 + (2+latBands*lonBands)*12;
-    
-    gl.bufferSubData( gl.ARRAY_BUFFER, indexPos, spherePosBuffer );
-    gl.bufferSubData( gl.ARRAY_BUFFER, indexCol, sphereColBuffer );
-    
-    gl.vertexAttribPointer( sp_pos, 3, gl.FLOAT, false, 0, 0 );
+    gl.vertexAttribPointer( sp_pos, 2, gl.FLOAT, false, 16, 0 );
     gl.enableVertexAttribArray( sp_pos );
     
-    gl.vertexAttribPointer( sp_color, 3, gl.FLOAT, false, 0, (2+latBands*lonBands)*12 );
-    gl.enableVertexAttribArray( sp_color );
-    
-    gl.vertexAttribPointer( sp_uv, 2, gl.FLOAT, false, 0, (2+latBands*lonBands)*24 );
+    gl.vertexAttribPointer( sp_uv, 2, gl.FLOAT, false, 16, 8 );
     gl.enableVertexAttribArray( sp_uv );
     
-    gl.vertexAttribPointer( sp_norm, 3, gl.FLOAT, false, 0, (2+latBands*lonBands)*32 );
-    gl.enableVertexAttribArray( sp_norm );
-    
-    gl.drawElements( gl.TRIANGLES, 6 * latBands * lonBands, gl.UNSIGNED_INT, 0 );
+    if ( displayPoints ) {
+        gl.drawArrays( gl.LINES, 0, 2 + latBands * lonBands );
+    } else {
+        gl.drawElements( gl.TRIANGLES, 6 * latBands * lonBands, gl.UNSIGNED_INT, 0 );
+    }
     
     gl.disableVertexAttribArray( sp_pos );
-    gl.disableVertexAttribArray( sp_color );
     gl.disableVertexAttribArray( sp_uv );
-    gl.disableVertexAttribArray( sp_norm );
 }
 
 window.onload = initWindow;
@@ -310,9 +325,9 @@ window.onresize = resizeCanvas;
 
 // Utility Functions
 
-function scaleValue(x) {
+function scaleValue(x, div0, div1) {
     if ( x == 0 )
         return 0;
     else
-        return Math.abs(x)/x * Math.sqrt(Math.abs(x) / 18.0) / 18.0;
+        return Math.abs(x)/x * Math.sqrt(Math.abs(x) / div0) / div1;
 }

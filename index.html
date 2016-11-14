@@ -25,14 +25,17 @@
     </script>
     
     <script id="sphere-vshader" type="x-shader/x-vertex">
+    #define M_PI 3.1415926535897932384626433832795
+    
+    uniform float audioData[1024];
+    uniform vec3 audioBumps[1024];
+    
     uniform mat4 modelViewMatrix;
     uniform mat4 projectionMatrix;
     uniform mat3 normalMatrix;
     
-    attribute vec3 vPosition;
-    attribute vec3 vColor;
+    attribute vec2 vPosition;
     attribute vec2 vUV;
-    attribute vec3 vNormal;
     
     varying vec2 fUV;
     varying vec3 fNormal;
@@ -41,11 +44,32 @@
     void
     main()
     {
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(vPosition, 1);
-        gl_PointSize = 8.0;
+        float theta = vPosition.x;
+        float phi = vPosition.y;
+        
+        float cosTheta = cos(theta);
+        float sinTheta = sin(theta);
+        float cosPhi = cos(phi);
+        float sinPhi = sin(phi);
+        
+        vec3 position = normalize(vec3(cosPhi * sinTheta, cosTheta, sinPhi * sinTheta));
+        
+        float h = 0.5;
+        for ( int i=0;i<1024;i++ ) {
+            float distance = acos(dot(position, audioBumps[i])) / M_PI;
+            float gauss = exp2(-256.0*distance*distance) / 2.0;
+            h += audioData[i] * gauss;
+        }
+        
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position * h, 1);
+        gl_PointSize = 16.0 / (1.0+gl_Position.z*gl_Position.z);
+        
         fUV = vUV;
-        fNormal = vNormal;
-        fColor = vColor;
+        fNormal = position;
+        
+        fColor = vec3( 1.0 / ( 1.0 + h ),
+                       ( h + 1.0 ) / 2.0,
+                       h / 2.0 );
     }
     </script>
     
@@ -62,7 +86,7 @@
     main()
     {
         float stren = clamp(dot(uLightDirection, fNormal), 0.0, 1.0);
-        gl_FragColor = vec4(fColor, 1.0);//0.25 * vec4(fColor.rbg,1) + 0.75 * vec4(fColor.rbg * stren, 1);
+        gl_FragColor = fColor.b * vec4(fColor.rgb,1) + (1.0-fColor.b) * vec4(fColor.rgb * stren, 1);
     }
     </script>
     
