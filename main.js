@@ -21,7 +21,7 @@ var responseValue = 0.25;
 var latBands = 128;
 var lonBands = 128;
 
-var audioElements = 512;
+var audioElements = 128;
 var audioConstElements = 1024;
 var audioIncrement = 1024 / audioElements;
 var audioBlurSize = audioIncrement;
@@ -139,6 +139,13 @@ function initWindow() {
 
     document.addEventListener('mousedown', function(event) {
         console.log(event);
+        for (var i = 0; i < boxes.length; i++) {
+
+            if ( event.x > (boxes[i][0]) && event.x < (boxes[i][0]+boxes[i][2])
+            && event.y > (boxes[i][1]) && event.y < (boxes[i][1]+boxes[i][3]) ) {
+                boxes[i][4]();
+            }
+        }
     })
     
     document.addEventListener('keydown', function(event) {
@@ -179,7 +186,7 @@ function initGL() {
     setupWaveProgram();
     setupSphereProgram();
     
-    boxes.push( [canvas.width - 158, (canvas.height - 58)/2, 150, 50] );
+    boxes.push( [canvas.width - 158, 8, 150, 50, boxClick] );
 
     function runProgram() {
         gl.clear( gl.COLOR_BUFFER_BIT );
@@ -316,8 +323,8 @@ function drawBox() {
     gl.useProgram( boxProgram );
     gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
 
-    gl.vertexAttribPointer( vPosition, 2, gl.FLOAT, false, 0, 0 );
-    gl.enableVertexAttribArray( vPosition );
+    gl.vertexAttribPointer( bp_position, 2, gl.FLOAT, false, 0, 0 );
+    gl.enableVertexAttribArray( bp_position );
 
     for (var i=0; i<boxes.length; i++) {
         var x = boxes[i][0]
@@ -325,7 +332,7 @@ function drawBox() {
         var w = boxes[i][2]
         var h = boxes[i][3]
 
-        var boxProjection = ortho (0, canvas.width, 0, canvas.height, 0, 1);
+        var boxProjection = ortho (0, canvas.width, canvas.height, 0, 0, 1);
         gl.uniformMatrix4fv ( bp_projection, false, flatten(boxProjection) ); 
         var boxModelView = mult( translate( x,y,0 ), scalem(w,h,1) );
         gl.uniformMatrix4fv ( bp_model_view, false, flatten(boxModelView) ); 
@@ -429,4 +436,9 @@ function createSphereVertexShader(idName, count) {
     var script = document.getElementById("sphere-vshader");
     script.innerHTML = "#define AUDIO_ELEMENTS " + count.toString() + "\r\n" +
                         script.innerHTML;
+}
+
+function boxClick() {
+    var fopen = document.getElementById("loadFile");
+    fopen.click();
 }
