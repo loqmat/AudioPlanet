@@ -21,25 +21,28 @@ var responseValue = 0.25;
 var latBands = 128;
 var lonBands = 128;
 
-var bufferWave = new Float32Array(2048);
-var bufferData = new Float32Array(1024);
-var bufferImpulse = new Float32Array(1024);
-var bufferBump = new Float32Array(3072);
-var bufferBumpRotation = [];
+var audioElements = 512;
+var audioConstElements = 1024;
+var audioIncrement = 1024 / audioElements;
+var audioBlurSize = audioIncrement;
 
-var blurSize = 16;
+var bufferWave = new Float32Array(2 * audioConstElements);
+var bufferData = new Float32Array(audioConstElements);
+var bufferImpulse = new Float32Array(audioConstElements);
+var bufferBump = new Float32Array(3 * audioConstElements);
+var bufferBumpRotation = [];
 
 var boxes = [];
 
 // Global Functions
 
-function processAudio(data) {
-    for (var i=0;i<Math.min(data.length, 1024);i++) {
+function processAudio(count, data) {
+    for (var i=0, aud=0; i<count; i+=audioIncrement, aud++) {
         var counted = 0;
         var unscaled = 0;
-        for ( var j=-blurSize;j<=blurSize;j++ ) {
+        for ( var j=-audioBlurSize;j<=audioBlurSize;j++ ) {
             var ij = i + j;
-            if ( ij < 0 || ij >= 1024 )
+            if ( ij < 0 || ij >= count )
                 continue;
             unscaled += data[ij];
             counted += 1;
@@ -47,21 +50,19 @@ function processAudio(data) {
         var height = unscaled / counted;
         var scaled_h = responseValue * height / 255.0;
         
-        var newWave = scaled_h + bufferWave[i*2+1] * (1.0-responseValue);
-        var newData = scaled_h * 0.25 + bufferData[i] * (1.0-responseValue);
+        var newWave = scaled_h + bufferWave[aud*2+1] * (1.0-responseValue);
+        var newData = scaled_h * 0.25 + bufferData[aud] * (1.0-responseValue);
         
-        if ( newData > bufferData[i] )
-            bufferImpulse[i] = Math.min(1.1 * bufferImpulse[i] + 0.1, 1.0 );
+        if ( newData > bufferData[aud] )
+            bufferImpulse[aud] = Math.min(1.1 * bufferImpulse[aud] + 0.1, 1.0 );
         else
-            bufferImpulse[i] = 0.9 * bufferImpulse[i];
+            bufferImpulse[aud] = 0.9 * bufferImpulse[aud];
         
-        bufferWave[i*2+1] = newWave;
-        bufferData[i]     = newData;
+        bufferWave[aud*2+1] = newWave;
+        bufferData[aud]     = newData;
     }
     
-    console.log(bufferImpulse[0]);
-    
-    for ( var i=0;i<1024;i++ ) {
+    for ( var i=0;i<audioElements;i++ ) {
         var xa = bufferBumpRotation[i][0];
         var ya = bufferBumpRotation[i][1];
         var za = bufferBumpRotation[i][2];
@@ -90,6 +91,7 @@ function processAudio(data) {
         bufferBump[i*3+1] = yf / wf;
         bufferBump[i*3+2] = zf / wf;
     }
+    
     gl.useProgram(sphereProgram);
     gl.uniform1fv(sp_audio_data, bufferData);
     gl.uniform1fv(sp_audio_impulse, bufferImpulse);
@@ -104,16 +106,18 @@ function initWindow() {
     }
     resizeCanvas();
     
+    createSphereVertexShader("sphere-vshader", audioElements);
+    
     var mouseDown = false;
-    window.onmousedown = function(e) {
+    canvas.onmousedown = function(e) {
         if ( e.which == 1 )
             mouseDown = true;
     }
-    window.onmouseup = function(e) {
+    canvas.onmouseup = function(e) {
         if ( e.which == 1 )
             mouseDown = false;
     }
-    window.onmousemove = function(e) {
+    canvas.onmousemove = function(e) {
         if ( mouseDown ) {
             var dx = scaleValue(e.movementX, 18.0, 18.0);
             var dy = scaleValue(e.movementY, 18.0, 18.0);
@@ -127,7 +131,7 @@ function initWindow() {
     }
     canvas.onwheel = function(e) {
         var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-        distance = Math.max( 1.5, Math.min(10, distance - delta));
+        distance = Math.max( 1.5, Math.min(10, distance - delta / 10.0));
     }
     
     initGL();
@@ -150,6 +154,7 @@ function initWindow() {
 }
 
 function initAudio() {
+
     var audio = new Audio("./audio/Carousel.mp3");
     var ctx = new AudioContext();
     var audioSrc = ctx.createMediaElementSource(audio);
@@ -161,7 +166,7 @@ function initAudio() {
     function renderFrame() {
         window.requestAnimationFrame(function(){ renderFrame(); });
         analyser.getByteFrequencyData(frequencyData);
-        processAudio(frequencyData);
+        processAudio(analyser.frequencyBinCount,frequencyData);
     }
     renderFrame();
     audio.play();
@@ -231,49 +236,55 @@ function setupWaveProgram() {
     //  Load shaders and initialize attribute buffers
     waveProgram = initShaders( gl, "wave-vshader", "wave-fshader" );
     gl.useProgram( waveProgram );
-	u_color = gl.getUniformLocation(waveProgram, "uColor");
+	wp_color = gl.getUniformLocation(waveProgram, "uColor");
     
     // Load the data into the GPU
     waveBuffer = gl.createBuffer();
     gl.bindBuffer( gl.ARRAY_BUFFER, waveBuffer );
-    gl.bufferData( gl.ARRAY_BUFFER, bufferWave, gl.STATIC_DRAW );
+    gl.bufferData( gl.ARRAY_BUFFER, bufferWave, gl.DYNAMIC_DRAW );
 
     // Associate out shader variables with our data buffer  
-    vPosition = gl.getAttribLocation( waveProgram, "vPosition" );
+    wp_position = gl.getAttribLocation( waveProgram, "vPosition" );
+    
+    gl.uniform4f(wp_color, 1.0, 0.65, 0.8, 1);
 }
 function setupSphereProgram() {
     sphereProgram = initShaders( gl, "sphere-vshader", "sphere-fshader" );
     gl.useProgram(sphereProgram);
     sp_light_dir = gl.getUniformLocation(sphereProgram, "uLightDirection");
     
-    modelViewMatrixLoc = gl.getUniformLocation( sphereProgram, "modelViewMatrix" );
-    projectionMatrixLoc = gl.getUniformLocation( sphereProgram, "projectionMatrix" );
-    nMatrixLoc = gl.getUniformLocation( sphereProgram, "normalMatrix" );
+    sp_model_view = gl.getUniformLocation( sphereProgram, "modelViewMatrix" );
+    sp_projection = gl.getUniformLocation( sphereProgram, "projectionMatrix" );
+    sp_normal_projection = gl.getUniformLocation( sphereProgram, "normalMatrix" );
     
     var sphereData = generatePTSphere(0.1,latBands,lonBands);
     
-    sphereVertex = gl.createBuffer();
-    sphereIndex = gl.createBuffer();
+    sphereVertexBuffer = gl.createBuffer();
+    sphereIndexBuffer = gl.createBuffer();
     
-    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertex );
+    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertexBuffer );
     gl.bufferData( gl.ARRAY_BUFFER, sphereData[0], gl.STATIC_DRAW );
     
-    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndex );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer );
     gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, sphereData[1], gl.STATIC_DRAW );
     
     sp_pos = gl.getAttribLocation( sphereProgram, "vPosition" );
     sp_uv = gl.getAttribLocation( sphereProgram, "vUV" );
+    sp_audio_elements = gl.getUniformLocation( sphereProgram, "audioElements" );
     sp_audio_data = gl.getUniformLocation( sphereProgram, "audioData" );
     sp_audio_impulse = gl.getUniformLocation( sphereProgram, "audioImpulse" );
     sp_audio_bumps = gl.getUniformLocation( sphereProgram, "audioBumps" );
     sp_imp_gradient_colors = gl.getUniformLocation( sphereProgram, "impulseGradientColors" );
     sp_nrm_gradient_colors = gl.getUniformLocation( sphereProgram, "normalGradientColors" );
     
-    for ( var i=0;i<1024;i++ ) {
+    
+    gl.uniform1f(sp_audio_elements, audioElements);
+    
+    for ( var i=0;i<audioElements;i++ ) {
         var bum = randomVector();
         var rot = randomVector();
         
-        bufferWave[i*2+0] = i / 1024.0 * 1.8 - 0.9;
+        bufferWave[i*2+0] = i / audioElements * 1.8 - 0.9;
         bufferWave[i*2+1] = -0.9;
         bufferImpulse[i] = 0.0;
         
@@ -322,7 +333,7 @@ function drawBox() {
         gl.drawArrays( gl.LINE_LOOP, 0, 4 );
     }
 
-    gl.disableVertexAttribArray( vPosition );
+    gl.disableVertexAttribArray( bp_position );
     gl.depthMask(true);
 }
 
@@ -333,32 +344,31 @@ function drawWave() {
     gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, null );
     gl.bindBuffer( gl.ARRAY_BUFFER, waveBuffer );
     
-    gl.vertexAttribPointer( vPosition, 2, gl.FLOAT, false, 0, 0 );
-    gl.enableVertexAttribArray( vPosition );
+    gl.vertexAttribPointer( wp_position, 2, gl.FLOAT, false, 0, 0 );
+    gl.enableVertexAttribArray( wp_position );
 
-    gl.uniform4f(u_color, 1.0, 0.65, 0.8, 1);
     gl.bufferSubData( gl.ARRAY_BUFFER, 0, bufferWave );
     gl.drawArrays( gl.POINTS, 0, bufferWave.length / 2 );
     
-    gl.disableVertexAttribArray( vPosition );
+    gl.disableVertexAttribArray( wp_position );
     gl.depthMask(true);
 }
 
 function drawSphere() {
-    modelViewMatrix = mult( translate(0,0,-distance), rotation );
-    projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
-    normalViewMatrix = normalMatrix(modelViewMatrix);
+    var modelViewMatrix = mult( translate(0,0,-distance), rotation );
+    var projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
+    var normalViewMatrix = normalMatrix(modelViewMatrix);
     
     gl.useProgram(sphereProgram);
     
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix) );
-    gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix) );
-    gl.uniformMatrix3fv(nMatrixLoc, false, flatten(normalViewMatrix) );
+    gl.uniformMatrix4fv(sp_model_view, false, flatten(modelViewMatrix) );
+    gl.uniformMatrix4fv(sp_projection, false, flatten(projectionMatrix) );
+    gl.uniformMatrix3fv(sp_normal_projection, false, flatten(normalViewMatrix) );
         
     gl.uniform3f(sp_light_dir, 0.0, 0.7071, 0.7071);
     
-    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertex );
-    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndex );
+    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertexBuffer );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer );
     
     gl.vertexAttribPointer( sp_pos, 2, gl.FLOAT, false, 16, 0 );
     gl.enableVertexAttribArray( sp_pos );
@@ -413,4 +423,10 @@ function randomVector() {
             return [x/w,y/w,z/w];
     }
     return [1,0,0];
+}
+
+function createSphereVertexShader(idName, count) {            
+    var script = document.getElementById("sphere-vshader");
+    script.innerHTML = "#define AUDIO_ELEMENTS " + count.toString() + "\r\n" +
+                        script.innerHTML;
 }
