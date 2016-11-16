@@ -26,6 +26,10 @@ var audioConstElements = 1024;
 var audioIncrement = 1024 / audioElements;
 var audioBlurSize = audioIncrement;
 
+var audioNodes = [];
+var audioCurrentNode = null;
+var audioFrequencyData = new Uint8Array(audioConstElements);
+
 var bufferWave = new Float32Array(2 * audioConstElements);
 var bufferData = new Float32Array(audioConstElements);
 var bufferImpulse = new Float32Array(audioConstElements);
@@ -34,69 +38,17 @@ var bufferBumpRotation = [];
 
 var boxes = [];
 
-// Global Functions
+var normalColors = [vec3(0.0, 0.0, 1.0),
+                    vec3(1.0, 0.0, 1.0),
+                    vec3(1.0, 0.5, 0.8),
+                    vec3(1.0, 1.0, 1.0)];
+                    
+var impulseColors = [vec3(0.0, 1.0, 0.0),
+                     vec3(0.4, 1.0, 0.4),
+                     vec3(0.8, 1.0, 0.8),
+                     vec3(1.0, 1.0, 1.0)];
 
-function processAudio(count, data) {
-    for (var i=0, aud=0; i<count; i+=audioIncrement, aud++) {
-        var counted = 0;
-        var unscaled = 0;
-        for ( var j=-audioBlurSize;j<=audioBlurSize;j++ ) {
-            var ij = i + j;
-            if ( ij < 0 || ij >= count )
-                continue;
-            unscaled += data[ij];
-            counted += 1;
-        }
-        var height = unscaled / counted;
-        var scaled_h = responseValue * height / 255.0;
-        
-        var newWave = scaled_h + bufferWave[aud*2+1] * (1.0-responseValue);
-        var newData = scaled_h * 0.25 + bufferData[aud] * (1.0-responseValue);
-        
-        if ( newData > bufferData[aud] )
-            bufferImpulse[aud] = Math.min(1.1 * bufferImpulse[aud] + 0.1, 1.0 );
-        else
-            bufferImpulse[aud] = 0.9 * bufferImpulse[aud];
-        
-        bufferWave[aud*2+1] = newWave;
-        bufferData[aud]     = newData;
-    }
-    
-    for ( var i=0;i<audioElements;i++ ) {
-        var xa = bufferBumpRotation[i][0];
-        var ya = bufferBumpRotation[i][1];
-        var za = bufferBumpRotation[i][2];
-        var theta = bufferBumpRotation[i][3];
-        
-        var xp = bufferBump[i*3+0];
-        var yp = bufferBump[i*3+1];
-        var zp = bufferBump[i*3+2];
-        
-        var a = vec3(xa,ya,za);
-        var p = vec3(xp,yp,zp);
-        
-        var cos = Math.cos(theta);
-        var inv_cos = 1.0 - cos;
-        var sin = Math.sin(theta);
-        
-        var vdot = dot(a, p);
-        var vcross = cross(a, p);
-        
-        var xf = xp * cos + vdot * xa * inv_cos + vcross[0] * sin;
-        var yf = yp * cos + vdot * ya * inv_cos + vcross[1] * sin;
-        var zf = zp * cos + vdot * za * inv_cos + vcross[2] * sin;
-        var wf = Math.sqrt(xf*xf+yf*yf+zf*zf);
-        
-        bufferBump[i*3+0] = xf / wf;
-        bufferBump[i*3+1] = yf / wf;
-        bufferBump[i*3+2] = zf / wf;
-    }
-    
-    gl.useProgram(sphereProgram);
-    gl.uniform1fv(sp_audio_data, bufferData);
-    gl.uniform1fv(sp_audio_impulse, bufferImpulse);
-    gl.uniform3fv(sp_audio_bumps, bufferBump);
-}
+// Global Functions
 function initWindow() {
     getFiles = document.getElementById( "loadFile" );
     canvas = document.getElementById( "GLCanvas" );
@@ -106,7 +58,7 @@ function initWindow() {
     }
     resizeCanvas();
     
-    createSphereVertexShader("sphere-vshader", audioElements);
+    modifySphereVertexShader("sphere-vshader", audioElements);
     
     var mouseDown = false;
     canvas.onmousedown = function(e) {
@@ -143,7 +95,8 @@ function initWindow() {
 
             if ( event.x > (boxes[i][0]) && event.x < (boxes[i][0]+boxes[i][2])
             && event.y > (boxes[i][1]) && event.y < (boxes[i][1]+boxes[i][3]) ) {
-                boxes[i][4]();
+                boxes[i][4]( i );
+                console.log ("box:", i);
             }
         }
     })
@@ -161,22 +114,18 @@ function initWindow() {
 }
 
 function initAudio() {
-
-    var audio = new Audio("./audio/Carousel.mp3");
-    var ctx = new AudioContext();
-    var audioSrc = ctx.createMediaElementSource(audio);
-    var analyser = ctx.createAnalyser();
-    audioSrc.connect(analyser);
-    audioSrc.connect(ctx.destination);  
-    console.log(analyser.frequencyBinCount);
-    var frequencyData = new Uint8Array(analyser.frequencyBinCount);
     function renderFrame() {
-        window.requestAnimationFrame(function(){ renderFrame(); });
-        analyser.getByteFrequencyData(frequencyData);
-        processAudio(analyser.frequencyBinCount,frequencyData);
+        window.requestAnimationFrame(renderFrame);
+        if ( audioCurrentNode != null ) {
+            audioCurrentNode.getFrequencyData(audioFrequencyData);
+        } else {
+            for ( var i=0;i<audioConstElements;i++ )
+                audioFrequencyData[i] = 0;
+        }
+        processAudio();
     }
+    
     renderFrame();
-    audio.play();
 }
 
 function initGL() {
@@ -186,7 +135,7 @@ function initGL() {
     setupWaveProgram();
     setupSphereProgram();
     
-    boxes.push( [canvas.width - 158, 8, 150, 50, boxClick] );
+    boxes.push( [canvas.width - 158, 8, 150, 50, boxClick, null] );
 
     function runProgram() {
         gl.clear( gl.COLOR_BUFFER_BIT );
@@ -210,7 +159,7 @@ function setupGLParams() {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
     gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.BACK);
+    gl.cullFace(gl.FRONT);
     
     ElementIndexUint = gl.getExtension("OES_element_index_uint");
     VertexArrayObjects = gl.getExtension("OES_vertex_array_object");
@@ -303,17 +252,6 @@ function setupSphereProgram() {
     }
     
     gl.uniform3fv(sp_audio_bumps, bufferBump);
-    
-    var normalColors = [vec3(0.0, 0.0, 1.0),
-                        vec3(1.0, 0.0, 1.0),
-                        vec3(1.0, 0.5, 0.8),
-                        vec3(1.0, 1.0, 1.0)];
-                        
-    var impulseColors = [vec3(0.0, 1.0, 0.0),
-                         vec3(0.4, 1.0, 0.4),
-                         vec3(0.8, 1.0, 0.8),
-                         vec3(1.0, 1.0, 1.0)];
-                  
     gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors));
     gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors));
 }
@@ -362,7 +300,7 @@ function drawWave() {
 }
 
 function drawSphere() {
-    var modelViewMatrix = mult( translate(0,0,-distance), rotation );
+    var modelViewMatrix = rotation;//mult( translate(0,0,-distance), rotation );
     var projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
     var normalViewMatrix = normalMatrix(modelViewMatrix);
     
@@ -391,6 +329,110 @@ function drawSphere() {
     
     gl.disableVertexAttribArray( sp_pos );
     gl.disableVertexAttribArray( sp_uv );
+}
+
+function createAudioNode( fname ) {
+    var ret = new Object();
+    
+    ret.audioNode = new Audio( fname );
+    ret.context = new AudioContext();
+    ret.audioSrc = ret.context.createMediaElementSource(ret.audioNode);
+    ret.analyser = ret.context.createAnalyser();
+    
+    ret.audioSrc.connect(ret.analyser);
+    ret.audioSrc.connect(ret.context.destination);  
+    
+    ret.makeCurrent = function() {
+        if ( audioCurrentNode != null ) {
+            audioCurrentNode.pause();
+        }
+        audioCurrentNode = this;
+        this.audioNode.play();
+    }
+    ret.getFrequencyData = function(data) {
+        this.analyser.getByteFrequencyData(data);
+    };
+    ret.play = function() {
+        this.audioNode.play();
+    };
+    ret.pause = function() {
+        this.audioNode.pause();
+    };
+    ret.stop = function() {
+        this.audioNode.pause();
+        this.audioNode.currentTime = 0;
+    };
+    ret.toggle = function() {
+        if( this.audioNode.paused )
+            this.audioNode.play();
+        else
+            this.audioNode.pause();
+    };
+    
+    audioNodes.push( ret );
+    
+    return ret;
+}
+function processAudio() {
+    for (var i=0, aud=0; i<audioConstElements; i+=audioIncrement, aud++) {
+        var counted = 0;
+        var unscaled = 0;
+        for ( var j=-audioBlurSize;j<=audioBlurSize;j++ ) {
+            var ij = i + j;
+            if ( ij < 0 || ij >= audioConstElements )
+                continue;
+            unscaled += audioFrequencyData[ij];
+            counted += 1;
+        }
+        var height = unscaled / counted;
+        var scaled_h = responseValue * height / 255.0;
+        
+        var newWave = scaled_h + bufferWave[aud*2+1] * (1.0-responseValue);
+        var newData = scaled_h * 0.25 + bufferData[aud] * (1.0-responseValue);
+        
+        if ( newData > bufferData[aud] )
+            bufferImpulse[aud] = Math.min(1.1 * bufferImpulse[aud] + 0.1, 1.0 );
+        else
+            bufferImpulse[aud] = 0.9 * bufferImpulse[aud];
+        
+        bufferWave[aud*2+1] = newWave;
+        bufferData[aud]     = newData;
+    }
+    
+    for ( var i=0;i<audioElements;i++ ) {
+        var xa = bufferBumpRotation[i][0];
+        var ya = bufferBumpRotation[i][1];
+        var za = bufferBumpRotation[i][2];
+        var theta = bufferBumpRotation[i][3];
+        
+        var xp = bufferBump[i*3+0];
+        var yp = bufferBump[i*3+1];
+        var zp = bufferBump[i*3+2];
+        
+        var a = vec3(xa,ya,za);
+        var p = vec3(xp,yp,zp);
+        
+        var cos = Math.cos(theta);
+        var inv_cos = 1.0 - cos;
+        var sin = Math.sin(theta);
+        
+        var vdot = dot(a, p);
+        var vcross = cross(a, p);
+        
+        var xf = xp * cos + vdot * xa * inv_cos + vcross[0] * sin;
+        var yf = yp * cos + vdot * ya * inv_cos + vcross[1] * sin;
+        var zf = zp * cos + vdot * za * inv_cos + vcross[2] * sin;
+        var wf = Math.sqrt(xf*xf+yf*yf+zf*zf);
+        
+        bufferBump[i*3+0] = xf / wf;
+        bufferBump[i*3+1] = yf / wf;
+        bufferBump[i*3+2] = zf / wf;
+    }
+    
+    gl.useProgram(sphereProgram);
+    gl.uniform1fv(sp_audio_data, bufferData);
+    gl.uniform1fv(sp_audio_impulse, bufferImpulse);
+    gl.uniform3fv(sp_audio_bumps, bufferBump);
 }
 
 window.onload = initWindow;
@@ -432,13 +474,27 @@ function randomVector() {
     return [1,0,0];
 }
 
-function createSphereVertexShader(idName, count) {            
+function modifySphereVertexShader(idName, count) {            
     var script = document.getElementById("sphere-vshader");
     script.innerHTML = "#define AUDIO_ELEMENTS " + count.toString() + "\r\n" +
                         script.innerHTML;
 }
 
-function boxClick() {
-    var fopen = document.getElementById("loadFile");
-    fopen.click();
+function boxClick( num ) {  //takes in the index of the box that was clicked
+
+    if ( boxes[num][5] == null ) {
+        var fopen = document.getElementById("loadFile");
+        fopen.addEventListener('change', function(event) {
+            console.log (URL.createObjectURL(fopen.files[0]));
+            var audioNode = createAudioNode( URL.createObjectURL(fopen.files[0]));
+            boxes[num][5] = audioNode;
+            audioNode.makeCurrent();
+        } );    
+        fopen.click();  
+        boxes.push( [canvas.width - 158, 8*(num+2) + 50*(num+1), 150, 50, boxClick, null] );
+    }   
+    else {
+        boxes[num][5].makeCurrent();
+    }
+        
 }
