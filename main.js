@@ -29,6 +29,8 @@ var bufferBumpRotation = [];
 
 var blurSize = 16;
 
+var boxes = [];
+
 // Global Functions
 
 function processAudio(data) {
@@ -130,6 +132,10 @@ function initWindow() {
     
     initGL();
     initAudio();
+
+    document.addEventListener('mousedown', function(event) {
+        console.log(event);
+    })
     
     document.addEventListener('keydown', function(event) {
         if(event.keyCode == 37) {
@@ -142,8 +148,9 @@ function initWindow() {
         }
     });
 }
+
 function initAudio() {
-    var audio = new Audio("./audio/Red.m4a");
+    var audio = new Audio("./audio/Carousel.mp3");
     var ctx = new AudioContext();
     var audioSrc = ctx.createMediaElementSource(audio);
     var analyser = ctx.createAnalyser();
@@ -159,6 +166,7 @@ function initAudio() {
     renderFrame();
     audio.play();
 }
+
 function initGL() {
     //  Configure WebGL
     setupGLParams();
@@ -166,12 +174,14 @@ function initGL() {
     setupWaveProgram();
     setupSphereProgram();
     
+    boxes.push( [canvas.width - 158, (canvas.height - 58)/2, 150, 50] );
+
     function runProgram() {
         gl.clear( gl.COLOR_BUFFER_BIT );
         
         drawWave();
         drawSphere();
-        drawBox( canvas.width - 158, (canvas.height - 58)/2, 150, 50 );
+        drawBox();
         
         window.requestAnimationFrame(runProgram);
     }
@@ -290,20 +300,27 @@ function setupSphereProgram() {
     gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors));
 }
 
-function drawBox( x, y, w, h ) {
+function drawBox() {
     gl.depthMask(false);
     gl.useProgram( boxProgram );
     gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
 
-    var boxProjection = ortho (0, canvas.width, 0, canvas.height, 0, 1);
-    gl.uniformMatrix4fv ( bp_projection, false, flatten(boxProjection) ); 
-    var boxModelView = mult( translate( x,y,0 ), scalem(w,h,1) );
-    gl.uniformMatrix4fv ( bp_model_view, false, flatten(boxModelView) ); 
-    
     gl.vertexAttribPointer( vPosition, 2, gl.FLOAT, false, 0, 0 );
     gl.enableVertexAttribArray( vPosition );
 
-    gl.drawArrays( gl.LINE_LOOP, 0, 4 );
+    for (var i=0; i<boxes.length; i++) {
+        var x = boxes[i][0]
+        var y = boxes[i][1]
+        var w = boxes[i][2]
+        var h = boxes[i][3]
+
+        var boxProjection = ortho (0, canvas.width, 0, canvas.height, 0, 1);
+        gl.uniformMatrix4fv ( bp_projection, false, flatten(boxProjection) ); 
+        var boxModelView = mult( translate( x,y,0 ), scalem(w,h,1) );
+        gl.uniformMatrix4fv ( bp_model_view, false, flatten(boxModelView) ); 
+
+        gl.drawArrays( gl.LINE_LOOP, 0, 4 );
+    }
 
     gl.disableVertexAttribArray( vPosition );
     gl.depthMask(true);
