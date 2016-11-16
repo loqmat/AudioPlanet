@@ -484,12 +484,12 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
 
     if ( boxes[num][5] == null ) {
         var fopen = document.getElementById("loadFile");
-        fopen.addEventListener('change', function(event) {
+        fopen.onchange = function(event) {
             console.log (URL.createObjectURL(fopen.files[0]));
             var audioNode = createAudioNode( URL.createObjectURL(fopen.files[0]));
             boxes[num][5] = audioNode;
             audioNode.makeCurrent();
-        } );    
+        }
         fopen.click();  
         boxes.push( [canvas.width - 158, 8*(num+2) + 50*(num+1), 150, 50, boxClick, null] );
     }   
