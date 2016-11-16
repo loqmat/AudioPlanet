@@ -21,7 +21,7 @@ var responseValue = 0.25;
 var latBands = 128;
 var lonBands = 128;
 
-var audioElements = 512;
+var audioElements = 1024;
 var audioConstElements = 1024;
 var audioIncrement = 1024 / audioElements;
 var audioBlurSize = audioIncrement;
@@ -31,6 +31,16 @@ var bufferData = new Float32Array(audioConstElements);
 var bufferImpulse = new Float32Array(audioConstElements);
 var bufferBump = new Float32Array(3 * audioConstElements);
 var bufferBumpRotation = [];
+
+var normalColors = [vec3(0.0, 0.0, 1.0),
+                    vec3(1.0, 0.0, 1.0),
+                    vec3(1.0, 0.5, 0.8),
+                    vec3(1.0, 1.0, 1.0)];
+                    
+var impulseColors = [vec3(0.0, 1.0, 0.0),
+                     vec3(0.4, 1.0, 0.4),
+                     vec3(0.8, 1.0, 0.8),
+                     vec3(1.0, 1.0, 1.0)];
 
 // Global Functions
 
@@ -104,7 +114,7 @@ function initWindow() {
     }
     resizeCanvas();
     
-    createSphereVertexShader("sphere-vshader", audioElements);
+    modifySphereVertexShader("sphere-vshader", audioElements);
     
     var mouseDown = false;
     canvas.onmousedown = function(e) {
@@ -147,7 +157,7 @@ function initWindow() {
     });
 }
 function initAudio() {
-    var audio = new Audio("./audio/Lean On.m4a");
+    var audio = new Audio("./audio/Haunting.m4a");
     var ctx = new AudioContext();
     var audioSrc = ctx.createMediaElementSource(audio);
     var analyser = ctx.createAnalyser();
@@ -192,7 +202,7 @@ function setupGLParams() {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
     gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.BACK);
+    gl.cullFace(gl.FRONT);
     
     ElementIndexUint = gl.getExtension("OES_element_index_uint");
     VertexArrayObjects = gl.getExtension("OES_vertex_array_object");
@@ -285,17 +295,6 @@ function setupSphereProgram() {
     }
     
     gl.uniform3fv(sp_audio_bumps, bufferBump);
-    
-    var normalColors = [vec3(0.0, 0.0, 1.0),
-                        vec3(1.0, 0.0, 1.0),
-                        vec3(1.0, 0.5, 0.8),
-                        vec3(1.0, 1.0, 1.0)];
-                        
-    var impulseColors = [vec3(0.0, 1.0, 0.0),
-                         vec3(0.4, 1.0, 0.4),
-                         vec3(0.8, 1.0, 0.8),
-                         vec3(1.0, 1.0, 1.0)];
-                  
     gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors));
     gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors));
 }
@@ -337,7 +336,7 @@ function drawWave() {
 }
 
 function drawSphere() {
-    var modelViewMatrix = mult( translate(0,0,-distance), rotation );
+    var modelViewMatrix = rotation;//mult( translate(0,0,-distance), rotation );
     var projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
     var normalViewMatrix = normalMatrix(modelViewMatrix);
     
@@ -407,7 +406,7 @@ function randomVector() {
     return [1,0,0];
 }
 
-function createSphereVertexShader(idName, count) {            
+function modifySphereVertexShader(idName, count) {            
     var script = document.getElementById("sphere-vshader");
     script.innerHTML = "#define AUDIO_ELEMENTS " + count.toString() + "\r\n" +
                         script.innerHTML;
