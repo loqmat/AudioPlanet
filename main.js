@@ -57,8 +57,6 @@ function processAudio(data) {
         bufferData[i]     = newData;
     }
     
-    console.log(bufferImpulse[0]);
-    
     for ( var i=0;i<1024;i++ ) {
         var xa = bufferBumpRotation[i][0];
         var ya = bufferBumpRotation[i][1];
@@ -195,34 +193,36 @@ function setupWaveProgram() {
     //  Load shaders and initialize attribute buffers
     waveProgram = initShaders( gl, "wave-vshader", "wave-fshader" );
     gl.useProgram( waveProgram );
-	u_color = gl.getUniformLocation(waveProgram, "uColor");
+	wp_color = gl.getUniformLocation(waveProgram, "uColor");
     
     // Load the data into the GPU
     waveBuffer = gl.createBuffer();
     gl.bindBuffer( gl.ARRAY_BUFFER, waveBuffer );
-    gl.bufferData( gl.ARRAY_BUFFER, bufferWave, gl.STATIC_DRAW );
+    gl.bufferData( gl.ARRAY_BUFFER, bufferWave, gl.DYNAMIC_DRAW );
 
     // Associate out shader variables with our data buffer  
-    vPosition = gl.getAttribLocation( waveProgram, "vPosition" );
+    wp_position = gl.getAttribLocation( waveProgram, "vPosition" );
+    
+    gl.uniform4f(wp_color, 1.0, 0.65, 0.8, 1);
 }
 function setupSphereProgram() {
     sphereProgram = initShaders( gl, "sphere-vshader", "sphere-fshader" );
     gl.useProgram(sphereProgram);
     sp_light_dir = gl.getUniformLocation(sphereProgram, "uLightDirection");
     
-    modelViewMatrixLoc = gl.getUniformLocation( sphereProgram, "modelViewMatrix" );
-    projectionMatrixLoc = gl.getUniformLocation( sphereProgram, "projectionMatrix" );
-    nMatrixLoc = gl.getUniformLocation( sphereProgram, "normalMatrix" );
+    sp_model_view = gl.getUniformLocation( sphereProgram, "modelViewMatrix" );
+    sp_projection = gl.getUniformLocation( sphereProgram, "projectionMatrix" );
+    sp_normal_projection = gl.getUniformLocation( sphereProgram, "normalMatrix" );
     
     var sphereData = generatePTSphere(0.1,latBands,lonBands);
     
-    sphereVertex = gl.createBuffer();
-    sphereIndex = gl.createBuffer();
+    sphereVertexBuffer = gl.createBuffer();
+    sphereIndexBuffer = gl.createBuffer();
     
-    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertex );
+    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertexBuffer );
     gl.bufferData( gl.ARRAY_BUFFER, sphereData[0], gl.STATIC_DRAW );
     
-    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndex );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer );
     gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, sphereData[1], gl.STATIC_DRAW );
     
     sp_pos = gl.getAttribLocation( sphereProgram, "vPosition" );
@@ -271,32 +271,31 @@ function drawWave() {
     gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, null );
     gl.bindBuffer( gl.ARRAY_BUFFER, waveBuffer );
     
-    gl.vertexAttribPointer( vPosition, 2, gl.FLOAT, false, 0, 0 );
-    gl.enableVertexAttribArray( vPosition );
+    gl.vertexAttribPointer( wp_position, 2, gl.FLOAT, false, 0, 0 );
+    gl.enableVertexAttribArray( wp_position );
 
-    gl.uniform4f(u_color, 1.0, 0.65, 0.8, 1);
     gl.bufferSubData( gl.ARRAY_BUFFER, 0, bufferWave );
     gl.drawArrays( gl.POINTS, 0, bufferWave.length / 2 );
     
-    gl.disableVertexAttribArray( vPosition );
+    gl.disableVertexAttribArray( wp_position );
     gl.depthMask(true);
 }
 
 function drawSphere() {
-    modelViewMatrix = mult( translate(0,0,-distance), rotation );
-    projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
-    normalViewMatrix = normalMatrix(modelViewMatrix);
+    var modelViewMatrix = mult( translate(0,0,-distance), rotation );
+    var projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
+    var normalViewMatrix = normalMatrix(modelViewMatrix);
     
     gl.useProgram(sphereProgram);
     
-    gl.uniformMatrix4fv(modelViewMatrixLoc, false, flatten(modelViewMatrix) );
-    gl.uniformMatrix4fv(projectionMatrixLoc, false, flatten(projectionMatrix) );
-    gl.uniformMatrix3fv(nMatrixLoc, false, flatten(normalViewMatrix) );
+    gl.uniformMatrix4fv(sp_model_view, false, flatten(modelViewMatrix) );
+    gl.uniformMatrix4fv(sp_projection, false, flatten(projectionMatrix) );
+    gl.uniformMatrix3fv(sp_normal_projection, false, flatten(normalViewMatrix) );
         
     gl.uniform3f(sp_light_dir, 0.0, 0.7071, 0.7071);
     
-    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertex );
-    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndex );
+    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertexBuffer );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer );
     
     gl.vertexAttribPointer( sp_pos, 2, gl.FLOAT, false, 16, 0 );
     gl.enableVertexAttribArray( sp_pos );

@@ -64,7 +64,7 @@
                 float distance = acos(clamp(dot(position, audioBumps[i]),-1.0,1.0)) / M_PI;
                 float gauss = exp2(-256.0*distance*distance);
                 float height = audioData[i] * gauss;
-                h += (100.0 * height * height) / 4.0;
+                h += (100.0 * height * height) / 10.0;
                 imp += audioImpulse[i] * gauss;
             }
             
