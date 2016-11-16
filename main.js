@@ -21,7 +21,7 @@ var responseValue = 0.25;
 var latBands = 128;
 var lonBands = 128;
 
-var audioElements = 128;
+var audioElements = 256;
 var audioConstElements = 1024;
 var audioIncrement = 1024 / audioElements;
 var audioBlurSize = audioIncrement;
@@ -87,17 +87,8 @@ function initWindow() {
     initGL();
     initAudio();
     
-    var LeanOn = createAudioNode("./audio/Lean On.m4a");
-    var Red = createAudioNode("./audio/Red.m4a");
-    
-    Red.makeCurrent();
-    
     document.addEventListener('keydown', function(event) {
-        if(event.keyCode == 37) {
-            Red.makeCurrent();
-        } else if(event.keyCode == 39) {
-            LeanOn.makeCurrent();
-        } else if ( event.keyCode == 32 ) {
+        if ( event.keyCode == 32 ) {
             displayPoints = !displayPoints;
         }
     });
@@ -141,7 +132,6 @@ function setupGLParams() {
     gl.enable(gl.DEPTH_TEST);
     
     gl.enable(gl.BLEND);
-    gl.blendEquation(gl.FUNC_SUBTRACT);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
     gl.enable(gl.CULL_FACE);
