@@ -1,0 +1,25 @@
+
+<html>
+
+<input type="file" id="audio" onchange="playFile(this)" />
+<audio id="sound"></audio>
+<script type="text/javascript">
+    function playFile(obj) {
+	
+	  var sound = document.getElementById('sound');
+	  var reader = new FileReader();
+	  reader.onload = (function(audio) {return function(e) {audio.src = e.target.result;};})(sound);
+	  reader.addEventListener('load', function() {
+		document.getElementById("sound").play()
+	  });
+	  reader.readAsDataURL(obj.files[0]);
+	  
+	}
+</script>
+
+<body>
+    <canvas id="GLCanvas">
+        Oops ... your browser doesn't support the HTML5 canvas element
+    </canvas>
+</body>
+</html>

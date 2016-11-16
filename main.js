@@ -86,7 +86,7 @@ function processAudio(data) {
         bufferBump[i*3+1] = yf / wf;
         bufferBump[i*3+2] = zf / wf;
     }
-    
+    gl.useProgram(sphereProgram);
     gl.uniform1fv(sp_audio_data, bufferData);
     gl.uniform1fv(sp_audio_impulse, bufferImpulse);
     gl.uniform3fv(sp_audio_bumps, bufferBump);
@@ -160,6 +160,7 @@ function initAudio() {
 function initGL() {
     //  Configure WebGL
     setupGLParams();
+    setupBoxProgram();
     setupWaveProgram();
     setupSphereProgram();
     
@@ -168,6 +169,7 @@ function initGL() {
         
         drawWave();
         drawSphere();
+        drawBox( canvas.width - 158, (canvas.height - 58)/2, 150, 50 );
         
         window.requestAnimationFrame(runProgram);
     }
@@ -189,6 +191,30 @@ function setupGLParams() {
     ElementIndexUint = gl.getExtension("OES_element_index_uint");
     VertexArrayObjects = gl.getExtension("OES_vertex_array_object");
 }
+function setupBoxProgram() {
+    // Load shaders and initialize attribute buffers
+    boxProgram = initShaders ( gl, "box-vshader", "box-fshader" );
+    gl.useProgram( boxProgram );
+    var box = [
+        vec2( 0, 0 ),
+        vec2(  0,  1 ),
+        vec2(  1, 1 ),
+        vec2( 1, 0)
+    ];
+    
+    // Load the data into the GPU
+    boxBuffer = gl.createBuffer();
+    gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
+    gl.bufferData( gl.ARRAY_BUFFER, flatten(box), gl.STATIC_DRAW );
+
+    // Associate out shader variables with our data buffer  
+    bp_position = gl.getAttribLocation( boxProgram, "vPosition" );
+    bp_color = gl.getUniformLocation( boxProgram, "uColor");
+    bp_projection = gl.getUniformLocation( boxProgram, "uProjection");
+    bp_model_view = gl.getUniformLocation( boxProgram, "uModelView");
+    gl.uniform4f( bp_color,1,1,1,1 );
+}
+
 function setupWaveProgram() {
     //  Load shaders and initialize attribute buffers
     waveProgram = initShaders( gl, "wave-vshader", "wave-fshader" );
@@ -262,6 +288,25 @@ function setupSphereProgram() {
                   
     gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors));
     gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors));
+}
+
+function drawBox( x, y, w, h ) {
+    gl.depthMask(false);
+    gl.useProgram( boxProgram );
+    gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
+
+    var boxProjection = ortho (0, canvas.width, 0, canvas.height, 0, 1);
+    gl.uniformMatrix4fv ( bp_projection, false, flatten(boxProjection) ); 
+    var boxModelView = mult( translate( x,y,0 ), scalem(w,h,1) );
+    gl.uniformMatrix4fv ( bp_model_view, false, flatten(boxModelView) ); 
+    
+    gl.vertexAttribPointer( vPosition, 2, gl.FLOAT, false, 0, 0 );
+    gl.enableVertexAttribArray( vPosition );
+
+    gl.drawArrays( gl.LINE_LOOP, 0, 4 );
+
+    gl.disableVertexAttribArray( vPosition );
+    gl.depthMask(true);
 }
 
 function drawWave() {

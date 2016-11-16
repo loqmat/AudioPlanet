@@ -2,6 +2,29 @@
 <html>
 <head>
     <title> Computer Graphics Project </title>
+
+    
+    <script id="box-vshader" type="x-shader/x-vertex">
+        uniform mat4 uProjection; 
+        uniform mat4 uModelView;
+        attribute vec2 vPosition;
+
+        void
+        main()
+        {
+            gl_Position = uProjection * uModelView * vec4(vPosition,0,1);
+        }
+    </script>
+    <script id="box-fshader" type="x-shader/x-fragment">
+        precision mediump float;
+        uniform vec4 uColor;
+
+        void
+        main()
+        {
+            gl_FragColor = uColor;
+        }
+    </script>    
     
     <script id="wave-vshader" type="x-shader/x-vertex">
         attribute vec2 vPosition;
