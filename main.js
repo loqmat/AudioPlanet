@@ -21,7 +21,7 @@ var responseValue = 0.25;
 var latBands = 128;
 var lonBands = 128;
 
-var audioElements = 1024;
+var audioElements = 128;
 var audioConstElements = 1024;
 var audioIncrement = 1024 / audioElements;
 var audioBlurSize = audioIncrement;
@@ -87,15 +87,16 @@ function initWindow() {
     initGL();
     initAudio();
     
-    var audioNode = createAudioNode("./audio/Lean On.m4a");
-    audioNode.makeCurrent();
+    var LeanOn = createAudioNode("./audio/Lean On.m4a");
+    var Red = createAudioNode("./audio/Red.m4a");
+    
+    Red.makeCurrent();
     
     document.addEventListener('keydown', function(event) {
         if(event.keyCode == 37) {
-            alert('Left was pressed');
-        }
-        else if(event.keyCode == 39) {
-            alert('Right was pressed');
+            Red.makeCurrent();
+        } else if(event.keyCode == 39) {
+            LeanOn.makeCurrent();
         } else if ( event.keyCode == 32 ) {
             displayPoints = !displayPoints;
         }
@@ -144,7 +145,7 @@ function setupGLParams() {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
     gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.FRONT);
+    gl.cullFace(gl.BACK);
     
     ElementIndexUint = gl.getExtension("OES_element_index_uint");
     VertexArrayObjects = gl.getExtension("OES_vertex_array_object");
@@ -278,7 +279,8 @@ function drawWave() {
 }
 
 function drawSphere() {
-    var modelViewMatrix = rotation;//mult( translate(0,0,-distance), rotation );
+    //var modelViewMatrix = rotation;
+    var modelViewMatrix = mult( translate(0,0,-distance), rotation );
     var projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
     var normalViewMatrix = normalMatrix(modelViewMatrix);
     

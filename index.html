@@ -118,7 +118,7 @@
         main()
         {
             float stren = clamp(dot(uLightDirection, fNormal), 0.0, 1.0);
-            gl_FragColor = fCombine * vec4(fColor.rgb,1) + (1.0-fCombine) * vec4(fColor.rgb * stren, 1);
+            gl_FragColor = vec4(fCombine * fColor.rgb + (1.0-fCombine) * fColor.rgb * stren, 1);
         }
     </script>
     
