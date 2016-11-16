@@ -21,7 +21,7 @@ var responseValue = 0.25;
 var latBands = 128;
 var lonBands = 128;
 
-var audioElements = 256;
+var audioElements = 128;
 var audioConstElements = 1024;
 var audioIncrement = 1024 / audioElements;
 var audioBlurSize = audioIncrement;
@@ -35,6 +35,8 @@ var bufferData = new Float32Array(audioConstElements);
 var bufferImpulse = new Float32Array(audioConstElements);
 var bufferBump = new Float32Array(3 * audioConstElements);
 var bufferBumpRotation = [];
+
+var boxes = [];
 
 var normalColors = [vec3(0.0, 0.0, 1.0),
                     vec3(1.0, 0.0, 1.0),
@@ -86,6 +88,18 @@ function initWindow() {
     
     initGL();
     initAudio();
+
+    document.addEventListener('mousedown', function(event) {
+        console.log(event);
+        for (var i = 0; i < boxes.length; i++) {
+
+            if ( event.x > (boxes[i][0]) && event.x < (boxes[i][0]+boxes[i][2])
+            && event.y > (boxes[i][1]) && event.y < (boxes[i][1]+boxes[i][3]) ) {
+                boxes[i][4]( i );
+                console.log ("box:", i);
+            }
+        }
+    })
     
     document.addEventListener('keydown', function(event) {
         if ( event.keyCode == 32 ) {
@@ -93,6 +107,7 @@ function initWindow() {
         }
     });
 }
+
 function initAudio() {
     function renderFrame() {
         window.requestAnimationFrame(renderFrame);
@@ -107,6 +122,7 @@ function initAudio() {
     
     renderFrame();
 }
+
 function initGL() {
     //  Configure WebGL
     setupGLParams();
@@ -114,12 +130,14 @@ function initGL() {
     setupWaveProgram();
     setupSphereProgram();
     
+    boxes.push( [8, 8, 150, 50, boxClick, null] );
+
     function runProgram() {
         gl.clear( gl.COLOR_BUFFER_BIT );
         
         drawWave();
         drawSphere();
-        drawBox( canvas.width - 158, (canvas.height - 58)/2, 150, 50 );
+        drawBox();
         
         window.requestAnimationFrame(runProgram);
     }
@@ -232,20 +250,27 @@ function setupSphereProgram() {
     gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors));
 }
 
-function drawBox( x, y, w, h ) {
+function drawBox() {
     gl.depthMask(false);
     gl.useProgram( boxProgram );
     gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
 
-    var boxProjection = ortho (0, canvas.width, 0, canvas.height, 0, 1);
-    gl.uniformMatrix4fv ( bp_projection, false, flatten(boxProjection) ); 
-    var boxModelView = mult( translate( x,y,0 ), scalem(w,h,1) );
-    gl.uniformMatrix4fv ( bp_model_view, false, flatten(boxModelView) ); 
-    
     gl.vertexAttribPointer( bp_position, 2, gl.FLOAT, false, 0, 0 );
     gl.enableVertexAttribArray( bp_position );
 
-    gl.drawArrays( gl.LINE_LOOP, 0, 4 );
+    for (var i=0; i<boxes.length; i++) {
+        var x = boxes[i][0]
+        var y = boxes[i][1]
+        var w = boxes[i][2]
+        var h = boxes[i][3]
+
+        var boxProjection = ortho (0, canvas.width, canvas.height, 0, 0, 1);
+        gl.uniformMatrix4fv ( bp_projection, false, flatten(boxProjection) ); 
+        var boxModelView = mult( translate( x,y,0 ), scalem(w,h,1) );
+        gl.uniformMatrix4fv ( bp_model_view, false, flatten(boxModelView) ); 
+
+        gl.drawArrays( gl.LINE_LOOP, 0, 4 );
+    }
 
     gl.disableVertexAttribArray( bp_position );
     gl.depthMask(true);
@@ -313,8 +338,9 @@ function createAudioNode( fname ) {
     ret.audioSrc.connect(ret.context.destination);  
     
     ret.makeCurrent = function() {
-        if ( audioCurrentNode != null )
+        if ( audioCurrentNode != null ) {
             audioCurrentNode.pause();
+        }
         audioCurrentNode = this;
         this.audioNode.play();
     }
@@ -447,4 +473,22 @@ function modifySphereVertexShader(idName, count) {
     var script = document.getElementById("sphere-vshader");
     script.innerHTML = "#define AUDIO_ELEMENTS " + count.toString() + "\r\n" +
                         script.innerHTML;
+}
+
+function boxClick( num ) {  //takes in the index of the box that was clicked
+
+    if ( boxes[num][5] == null ) {
+        var fopen = document.getElementById("loadFile");
+        fopen.onchange = function(event) {
+            console.log (URL.createObjectURL(fopen.files[0]));
+            var audioNode = createAudioNode( URL.createObjectURL(fopen.files[0]));
+            boxes[num][5] = audioNode;
+            audioNode.makeCurrent();
+            boxes.push( [8, 8*(num+2) + 50*(num+1), 150, 50, boxClick, null] );
+        }
+        fopen.click();  
+    }   
+    else {
+        boxes[num][5].makeCurrent();
+    }    
 }
