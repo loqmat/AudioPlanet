@@ -49,6 +49,8 @@
     <script id="sphere-vshader" type="x-shader/x-vertex">
         // AUDIO_ELEMENTS will be defined later
         #define M_PI 3.1415926535897932384626433832795
+        #define M_LOG2 0.30102999566
+        
         uniform float audioData[AUDIO_ELEMENTS];
         uniform float audioImpulse[AUDIO_ELEMENTS];
         uniform vec3 audioBumps[AUDIO_ELEMENTS];
@@ -57,12 +59,15 @@
         uniform mat4 modelViewMatrix;
         uniform mat4 projectionMatrix;
         uniform mat3 normalMatrix;
+        
         attribute vec2 vPosition;
         attribute vec2 vUV;
+        
         varying float fCombine;
         varying vec2 fUV;
         varying vec3 fNormal;
         varying vec3 fColor;
+        
         void main()
         {
             float theta = vPosition.x;
@@ -71,27 +76,43 @@
             float sinTheta = sin(theta);
             float cosPhi = cos(phi);
             float sinPhi = sin(phi);
+            
             vec3 position = normalize(vec3(cosPhi * sinTheta, cosTheta, sinPhi * sinTheta));
+            vec3 normal = position;
+            
             fCombine = 0.0;
             float h = 0.5;
             float gauss_scale = float(AUDIO_ELEMENTS)/4.0;
+            
             for ( int i=0;i<AUDIO_ELEMENTS;i++ ) {
                 float distance = acos(clamp(dot(position, audioBumps[i]),-1.0,1.0)) / M_PI;
-                float gauss = exp2(-gauss_scale*distance*distance);
+                float expon = gauss_scale*distance*distance;
+                float gauss = exp2(-expon);
+                float deriv = distance * gauss_scale * M_LOG2 * exp2(1.0-expon);
+                float difer = 1.0 / (1.0 + deriv);
+                
+                //normal += (1.0-difer) * audioBumps[i] + difer * position;
+                
                 float height = audioData[i] * gauss;
                 h += (100.0 * height * height) / 10.0;
                 fCombine += audioImpulse[i] * gauss;
             }
+            
+            //normal /= float(AUDIO_ELEMENTS);
             fCombine /= 10.0;
+            
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position * h, 1);
             gl_PointSize = 6.0 / (1.0+gl_Position.z);
+            
             fUV = vUV;
-            fNormal = position;
+            fNormal = normal;
+            
             float A = 1.0 - clamp(abs(h-0.0), 0.0, 1.0);
             float B = 1.0 - clamp(abs(h-1.0), 0.0, 1.0);
             float C = 1.0 - clamp(abs(h-2.0), 0.0, 1.0);
             float D = 1.0 - clamp(abs(h-3.0), 0.0, 1.0);
             float E = A + B + C + D;
+            
             vec3 normalColor = normalGradientColors[0] * A / E + 
                                normalGradientColors[1] * B / E + 
                                normalGradientColors[2] * C / E + 
@@ -100,6 +121,7 @@
                                 impulseGradientColors[1] * B / E + 
                                 impulseGradientColors[2] * C / E + 
                                 impulseGradientColors[3] * D / E;
+                                
             fColor = fCombine * impulseColor + (1.0-fCombine) * normalColor;
         }
     </script>
@@ -114,11 +136,11 @@
         uniform vec3 uLightDirection;
         uniform vec4 uColor;
 
-        void
-        main()
+        void main()
         {
             float stren = clamp(dot(uLightDirection, fNormal), 0.0, 1.0);
-            gl_FragColor = fCombine * vec4(fColor.rgb,1) + (1.0-fCombine) * vec4(fColor.rgb * stren, 1);
+            gl_FragColor = vec4(fCombine * fColor.rgb + (1.0-fCombine) * fColor.rgb * stren, 1.0);
+            //gl_FragColor = vec4(fNormal, 1.0);
         }
     </script>
     

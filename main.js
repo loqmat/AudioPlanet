@@ -102,12 +102,7 @@ function initWindow() {
     })
     
     document.addEventListener('keydown', function(event) {
-        if(event.keyCode == 37) {
-            alert('Left was pressed');
-        }
-        else if(event.keyCode == 39) {
-            alert('Right was pressed');
-        } else if ( event.keyCode == 32 ) {
+        if ( event.keyCode == 32 ) {
             displayPoints = !displayPoints;
         }
     });
@@ -135,7 +130,7 @@ function initGL() {
     setupWaveProgram();
     setupSphereProgram();
     
-    boxes.push( [canvas.width - 158, 8, 150, 50, boxClick, null] );
+    boxes.push( [8, 8, 150, 50, boxClick, null] );
 
     function runProgram() {
         gl.clear( gl.COLOR_BUFFER_BIT );
@@ -155,11 +150,10 @@ function setupGLParams() {
     gl.enable(gl.DEPTH_TEST);
     
     gl.enable(gl.BLEND);
-    gl.blendEquation(gl.FUNC_SUBTRACT);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
     gl.enable(gl.CULL_FACE);
-    gl.cullFace(gl.FRONT);
+    gl.cullFace(gl.BACK);
     
     ElementIndexUint = gl.getExtension("OES_element_index_uint");
     VertexArrayObjects = gl.getExtension("OES_vertex_array_object");
@@ -300,7 +294,8 @@ function drawWave() {
 }
 
 function drawSphere() {
-    var modelViewMatrix = rotation;//mult( translate(0,0,-distance), rotation );
+    //var modelViewMatrix = rotation;
+    var modelViewMatrix = mult( translate(0,0,-distance), rotation );
     var projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
     var normalViewMatrix = normalMatrix(modelViewMatrix);
     
@@ -489,12 +484,11 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
             var audioNode = createAudioNode( URL.createObjectURL(fopen.files[0]));
             boxes[num][5] = audioNode;
             audioNode.makeCurrent();
+            boxes.push( [8, 8*(num+2) + 50*(num+1), 150, 50, boxClick, null] );
         }
         fopen.click();  
-        boxes.push( [canvas.width - 158, 8*(num+2) + 50*(num+1), 150, 50, boxClick, null] );
     }   
     else {
         boxes[num][5].makeCurrent();
-    }
-        
+    }    
 }
