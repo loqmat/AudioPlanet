@@ -38,20 +38,86 @@ var bufferBumpRotation = [];
 
 var boxes = [];
 
-var normalColors = [vec3(0.0, 0.0, 1.0),
-                    vec3(1.0, 0.0, 1.0),
-                    vec3(1.0, 0.5, 0.8),
-                    vec3(1.0, 1.0, 1.0)];
+var normalColors = [//midnight blue to neon blue
+                    [vec3(13.0/256.0, 51.0/256.0, 117.0/256.0),
+                    vec3(29.0/256.0, 104.0/256.0, 209.0/256.0),
+                    vec3(89.0/256.0, 214.0/256.0, 255.0/256.0),
+                    vec3(20.0/256.0, 251.0/256.0, 255.0/256.0)],
                     
-var impulseColors = [vec3(0.0, 1.0, 0.0),
-                     vec3(0.4, 1.0, 0.4),
-                     vec3(0.8, 1.0, 0.8),
-                     vec3(1.0, 1.0, 1.0)];
+                    //oxblood to light red
+                    [vec3(148.0/256.0, 4.0/256.0, 4.0/256.0),
+                    vec3(201.0/256.0, 14.0/256.0, 55.0/256.0),
+                    vec3(255.0/256.0, 20.0/256.0, 71.0/256.0),
+                    vec3(255.0/256.0, 82.0/256.0, 84.0/256.0)],
+                    
+                    //indigo to periwinkle
+                    [vec3(161.0/256.0, 140.0/256.0, 245.0/256.0),
+                    vec3(122.0/256.0, 53.0/256.0, 232.0/256.0),
+                    vec3(141.0/256.0, 81.0/256.0, 237.0/256.0),
+                    vec3(161.0/256.0, 140.0/256.0, 245.0/256.0)],
+
+                    //dark jewel purple to light maroon   
+                    [vec3(112.0/256.0, 3.0/256.0, 83.0/256.0),
+                    vec3(138.0/256.0, 0.0/256.0, 126.0/256.0),
+                    vec3(174.0/256.0, 84.0/256.0, 179.0/256.0),
+                    vec3(201.0/256.0, 157.0/256.0, 157.0/256.0)],
+    
+                    //magenta to light pink color
+                    [vec3(171.0/256.0, 31.0/256.0, 138.0/256.0),
+                    vec3(235.0/256.0, 0.0/256.0, 179.0/256.0),
+                    vec3(255.0/256.0, 92.0/256.0, 179.0/256.0),
+                    vec3(255.0/256.0, 181.0/256.0, 220.0/256.0)] ,
+                    
+                    //dark teal to pastel teal
+                    [vec3(4.0/256.0, 87.0/256.0, 110.0/256.0),
+                    vec3(32.0/256.0, 161.0/256.0, 179.0/256.0),
+                    vec3(4.0/256.0, 198.0/256.0, 201.0/256.0),
+                    vec3(168.0/256.0, 237.0/256.0, 236.0/256.0)],
+                    ];
+                    
+var impulseColors = [//pastel to forest green
+                    [vec3(230.0/256.0, 255.0/256.0, 189.0/256.0),
+                    vec3(164.0/256.0, 250.0/256.0, 25.0/256.0),
+                    vec3(48.0/256.0, 181.0/256.0, 14.0/256.0),
+                    vec3(63.0/256.0, 145.0/256.0, 12.0/256.0)],
+
+                    //neon yellow to orange
+                    [vec3(255.0/256.0, 255.0/256.0, 54.0/256.0),
+                    vec3(250.0/256.0, 229.0/256.0, 2.0/256.0),
+                    vec3(255.0/256.0, 196.0/256.0, 3.0/256.0),
+                    vec3(247.0/256.0, 190.0/256.0, 0.0/256.0)],
+                    
+                    //pink to pomegranate
+                    [vec3(255.0/256.0, 166.0/256.0, 201.0/256.0),
+                    vec3(250.0/256.0, 112.0/256.0, 167.0/256.0),
+                    vec3(227.0/256.0, 25.0/256.0, 126.0/256.0),
+                    vec3(201.0/256.0, 32.0/256.0, 75.0/256.0)],
+
+                    //pastel orange to dark amber 
+                    [vec3(237.0/256.0, 184.0/256.0, 109.0/256.0),
+                    vec3(237.0/256.0, 148.0/256.0, 45.0/256.0),
+                    vec3(232.0/256.0, 113.0/256.0, 16.0/256.0),
+                    vec3(181.0/256.0, 81.0/256.0, 0.0/256.0)],
+
+                    //light blue to royal blue color
+                    [vec3(181.0/256.0, 212.0/256.0, 255.0/256.0),
+                    vec3(115.0/256.0, 173.0/256.0, 255.0/256.0),
+                    vec3(15.0/256.0, 53.0/256.0, 219.0/256.0),
+                    vec3(92.0/256.0, 63.0/256.0, 252.0/256.0)],
+
+                    //pastel yellow to dark gold
+                    [vec3(247.0/256.0, 234.0/256.0, 173.0/256.0),
+                    vec3(237.0/256.0, 219.0/256.0, 138.0/256.0),
+                    vec3(252.0/256.0, 209.0/256.0, 18.0/256.0),
+                    vec3(199.0/256.0, 162.0/256.0, 0.0/256.0)]
+
+                    ];
 
 // Global Functions
 function initWindow() {
     getFiles = document.getElementById( "loadFile" );
     canvas = document.getElementById( "GLCanvas" );
+    textCanvas = document.getElementById( "TextCanvas" );
     gl = WebGLUtils.setupWebGL( canvas );
     if ( !gl ) {
         alert( "WebGL isn't available" );
@@ -130,7 +196,7 @@ function initGL() {
     setupWaveProgram();
     setupSphereProgram();
     
-    boxes.push( [8, 8, 150, 50, boxClick, null] );
+    boxes.push( [15, 15, 300, 50, boxClick, null] );
 
     function runProgram() {
         gl.clear( gl.COLOR_BUFFER_BIT );
@@ -246,8 +312,8 @@ function setupSphereProgram() {
     }
     
     gl.uniform3fv(sp_audio_bumps, bufferBump);
-    gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors));
-    gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors));
+    gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors[0]));
+    gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors[0]));
 }
 
 function drawBox() {
@@ -438,6 +504,8 @@ window.onresize = resizeCanvas;
 function resizeCanvas() {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
+    textCanvas.width  = window.innerWidth;
+    textCanvas.height = window.innerHeight;
     gl.viewport( 0, 0, window.innerWidth, window.innerHeight );
 }
 
@@ -484,11 +552,23 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
             var audioNode = createAudioNode( URL.createObjectURL(fopen.files[0]));
             boxes[num][5] = audioNode;
             audioNode.makeCurrent();
-            boxes.push( [8, 8*(num+2) + 50*(num+1), 150, 50, boxClick, null] );
+            var ctx = document.getElementById('TextCanvas').getContext('2d');
+            ctx.font = "18px sans-serif";
+            ctx.fillStyle = "rgba(255,255,255,0.5)";
+            var songName = fopen.files[0].name.substring(0,fopen.files[0].name.length-4);
+            if (songName.length > 32)
+                ctx.fillText(songName.substring(0,32), 22, 30 + 15*(num+1) + 50*(num));
+            else
+                ctx.fillText(songName, 22, 30 + 15*(num+1) + 50*(num) );
+            if ( boxes.length < 6 ) {
+                boxes.push( [15, 15*(num+2) + 50*(num+1), 300, 50, boxClick, null] );
+            }
         }
         fopen.click();  
     }   
     else {
         boxes[num][5].makeCurrent();
     }    
+    gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors[num]));
+    gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors[num]));
 }
