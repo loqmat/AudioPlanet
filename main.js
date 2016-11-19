@@ -158,9 +158,13 @@ function initWindow() {
     document.addEventListener('mousedown', function(event) {
         console.log(event);
         for (var i = 0; i < boxes.length; i++) {
+            
+            var pointx = Math.abs(event.x - (boxes[i][0] + (boxes[i][2]/2.0)) );        
+            var pointy = Math.abs(event.y - (boxes[i][1] + (boxes[i][3]/2.0)) );
 
-            if ( event.x > (boxes[i][0]) && event.x < (boxes[i][0]+boxes[i][2])
-            && event.y > (boxes[i][1]) && event.y < (boxes[i][1]+boxes[i][3]) ) {
+            if ( !(pointx > (boxes[i][2]/2.0) || pointy > (boxes[i][3]/2.0)) ||
+            ((boxes[i][3]/2.0) * (boxes[i][2]/2.0) - (boxes[i][3]/2.0) * pointx - (boxes[i][2]/2.0) * pointy >= 0) )
+            {
                 boxes[i][4]( i );
                 console.log ("box:", i);
             }
@@ -196,7 +200,7 @@ function initGL() {
     setupWaveProgram();
     setupSphereProgram();
     
-    boxes.push( [15, 15, 300, 50, boxClick, null] );
+    boxes.push( [15, 15, 200, 180, boxClick, null] );
 
     function runProgram() {
         gl.clear( gl.COLOR_BUFFER_BIT );
@@ -229,10 +233,12 @@ function setupBoxProgram() {
     boxProgram = initShaders ( gl, "box-vshader", "box-fshader" );
     gl.useProgram( boxProgram );
     var box = [
-        vec2( 0, 0 ),
-        vec2(  0,  1 ),
-        vec2(  1, 1 ),
-        vec2( 1, 0)
+        vec2( 0.25, 0 ),
+        vec2( 0, 0.5 ),
+        vec2( 0.25, 1 ),
+        vec2(  0.75,  1 ),
+        vec2(  1, 0.5 ),
+        vec2( 0.75, 0)
     ];
     
     // Load the data into the GPU
@@ -245,7 +251,7 @@ function setupBoxProgram() {
     bp_color = gl.getUniformLocation( boxProgram, "uColor");
     bp_projection = gl.getUniformLocation( boxProgram, "uProjection");
     bp_model_view = gl.getUniformLocation( boxProgram, "uModelView");
-    gl.uniform4f( bp_color,1,1,1,1 );
+    gl.uniform4f( bp_color,1,1,1,0.5 );
 }
 
 function setupWaveProgram() {
@@ -325,17 +331,17 @@ function drawBox() {
     gl.enableVertexAttribArray( bp_position );
 
     for (var i=0; i<boxes.length; i++) {
-        var x = boxes[i][0]
-        var y = boxes[i][1]
-        var w = boxes[i][2]
-        var h = boxes[i][3]
+        var x = boxes[i][0];
+        var y = boxes[i][1];
+        var w = boxes[i][2];
+        var h = boxes[i][3];
 
         var boxProjection = ortho (0, canvas.width, canvas.height, 0, 0, 1);
         gl.uniformMatrix4fv ( bp_projection, false, flatten(boxProjection) ); 
         var boxModelView = mult( translate( x,y,0 ), scalem(w,h,1) );
         gl.uniformMatrix4fv ( bp_model_view, false, flatten(boxModelView) ); 
 
-        gl.drawArrays( gl.LINE_LOOP, 0, 4 );
+        gl.drawArrays( gl.LINE_LOOP, 0, 6 );
     }
 
     gl.disableVertexAttribArray( bp_position );
@@ -552,16 +558,10 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
             var audioNode = createAudioNode( URL.createObjectURL(fopen.files[0]));
             boxes[num][5] = audioNode;
             audioNode.makeCurrent();
-            var ctx = document.getElementById('TextCanvas').getContext('2d');
-            ctx.font = "18px sans-serif";
-            ctx.fillStyle = "rgba(255,255,255,0.5)";
             var songName = fopen.files[0].name.substring(0,fopen.files[0].name.length-4);
-            if (songName.length > 32)
-                ctx.fillText(songName.substring(0,32), 22, 30 + 15*(num+1) + 50*(num));
-            else
-                ctx.fillText(songName, 22, 30 + 15*(num+1) + 50*(num) );
+            drawText( songName, num );
             if ( boxes.length < 6 ) {
-                boxes.push( [15, 15*(num+2) + 50*(num+1), 300, 50, boxClick, null] );
+                boxes.push( [15 + 175*((num+1)%2), 15*(num+2) + 90*(num+1), 200, 180, boxClick, null] );
             }
         }
         fopen.click();  
@@ -572,3 +572,14 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
     gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors[num]));
     gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors[num]));
 }
+
+function drawText ( name, num ) {
+    var ctx = document.getElementById('TextCanvas').getContext('2d');
+    ctx.font = "20px sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    
+    if (name.length > 20)
+        ctx.fillText(name.substring(0,20), 30 + 175*((num)%2), 15*(num+2) + 90*(num+1) -10 );
+    else
+        ctx.fillText(name, 30 + 175*((num)%2), 15*(num+2) + 90*(num+1) -10 );
+} 
