@@ -14,14 +14,12 @@ var displayPoints = false;
 var distance = 4;
 var rotation = translate(0,0,0);
 
-var getFiles;
-
 var responseValue = 0.25;
 
-var latBands = 128;
-var lonBands = 128;
+var latBands = 256;
+var lonBands = 256;
 
-var audioElements = 128;
+var audioElements = 256;
 var audioConstElements = 1024;
 var audioIncrement = 1024 / audioElements;
 var audioBlurSize = audioIncrement;
@@ -50,26 +48,28 @@ var impulseColors = [vec3(0.0, 1.0, 0.0),
 
 // Global Functions
 function initWindow() {
-    getFiles = document.getElementById( "loadFile" );
     canvas = document.getElementById( "GLCanvas" );
     gl = WebGLUtils.setupWebGL( canvas );
     if ( !gl ) {
         alert( "WebGL isn't available" );
     }
-    resizeCanvas();
     
-    modifySphereVertexShader("sphere-vshader", audioElements);
-    
+    initGL();
+    initAudio();
+    initInputs();
+}
+
+function initInputs() {
     var mouseDown = false;
-    canvas.onmousedown = function(e) {
+    window.onmousedown = function(e) {
         if ( e.which == 1 )
             mouseDown = true;
     }
-    canvas.onmouseup = function(e) {
+    window.onmouseup = function(e) {
         if ( e.which == 1 )
             mouseDown = false;
     }
-    canvas.onmousemove = function(e) {
+    window.onmousemove = function(e) {
         if ( mouseDown ) {
             var dx = scaleValue(e.movementX, 18.0, 18.0);
             var dy = scaleValue(e.movementY, 18.0, 18.0);
@@ -81,33 +81,31 @@ function initWindow() {
             rotation = mult( rotation, qr );
         }
     }
-    canvas.onwheel = function(e) {
+    window.onwheel = function(e) {
         var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
         distance = Math.max( 1.5, Math.min(10, distance - delta / 10.0));
     }
     
-    initGL();
-    initAudio();
-
-    document.addEventListener('mousedown', function(event) {
+    window.addEventListener('mousedown', function(event) {
         console.log(event);
         for (var i = 0; i < boxes.length; i++) {
-
-            if ( event.x > (boxes[i][0]) && event.x < (boxes[i][0]+boxes[i][2])
-            && event.y > (boxes[i][1]) && event.y < (boxes[i][1]+boxes[i][3]) ) {
+            if ( event.x > (boxes[i][0]) && event.x < (boxes[i][0]+boxes[i][2]) && 
+                 event.y > (boxes[i][1]) && event.y < (boxes[i][1]+boxes[i][3]) ) {
                 boxes[i][4]( i );
                 console.log ("box:", i);
             }
         }
-    })
-    
-    document.addEventListener('keydown', function(event) {
+    });
+    window.addEventListener('resize', function(e) {
+        resizeCanvas();
+        resizePostprocess();
+    });
+    window.addEventListener('keydown', function(event) {
         if ( event.keyCode == 32 ) {
             displayPoints = !displayPoints;
         }
     });
 }
-
 function initAudio() {
     function renderFrame() {
         window.requestAnimationFrame(renderFrame);
@@ -125,19 +123,39 @@ function initAudio() {
 
 function initGL() {
     //  Configure WebGL
+    resizeCanvas();
     setupGLParams();
+    setupBoxBuffer();
     setupBoxProgram();
     setupWaveProgram();
     setupSphereProgram();
+    setupPostprocess();
+    resizePostprocess();
     
     boxes.push( [8, 8, 150, 50, boxClick, null] );
 
     function runProgram() {
-        gl.clear( gl.COLOR_BUFFER_BIT );
         
-        drawWave();
-        drawSphere();
-        drawBox();
+        drawCall(pp_fbo_main, function() {
+            drawWave();
+            drawSphere();
+        });
+        drawCall(pp_fbo_blur_x, function() {
+            drawBlurXPass(pp_color_texture);
+        });
+        drawCall(pp_fbo_blur_y, function() {
+            drawBlurYPass(pp_blur_x_texture);
+        });
+        drawCall(pp_fbo_blur_x, function() {
+            drawBlurXPass(pp_blur_y_texture);
+        });
+        drawCall(pp_fbo_blur_y, function() {
+            drawBlurYPass(pp_blur_x_texture);
+        });
+        drawCall(null, function() {
+            drawFinalPass(pp_color_texture, pp_blur_y_texture);
+            drawBox();
+        });
         
         window.requestAnimationFrame(runProgram);
     }
@@ -145,12 +163,9 @@ function initGL() {
     runProgram();
 }
 function setupGLParams() {
-    gl.clearColor( 0.0, 0.0, 0.0, 1.0 );
+    gl.clearColor( 0.0, 0.0, 0.0, 0.0 );
     
     gl.enable(gl.DEPTH_TEST);
-    
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
@@ -158,21 +173,117 @@ function setupGLParams() {
     ElementIndexUint = gl.getExtension("OES_element_index_uint");
     VertexArrayObjects = gl.getExtension("OES_vertex_array_object");
 }
-function setupBoxProgram() {
-    // Load shaders and initialize attribute buffers
-    boxProgram = initShaders ( gl, "box-vshader", "box-fshader" );
-    gl.useProgram( boxProgram );
+function setupPostprocess() {
+    // Blur Kernel
+    var kernel = [];
+    for ( var i=-4;i<=4;i++ ) {
+        kernel.push(1.0 / 9.0);
+    }
+    
+    // Blur X Shader
+    ppBlurXProgram = initShaders( gl, "pp-vshader", "ppblurx-fshader" );
+    
+    gl.useProgram( ppBlurXProgram );
+    pp_blurx_image = gl.getUniformLocation(ppBlurXProgram, "uImage");
+    pp_blurx_image_size = gl.getUniformLocation(ppBlurXProgram, "uImageSize");
+    pp_blurx_kernel = gl.getUniformLocation(ppBlurXProgram, "uKernel");
+	pp_blurx_color = gl.getUniformLocation(ppBlurXProgram, "uColor");
+    
+    pp_blurx_position = gl.getAttribLocation(ppBlurXProgram, "vPosition");
+    
+    gl.uniform4f(pp_blurx_color, 1.0, 1.0, 1.0, 1.0);
+    gl.uniform1i(pp_blurx_image, 0);
+    gl.uniform1fv(pp_blurx_kernel, kernel);
+    
+    // Blur Y Shader
+    ppBlurYProgram = initShaders( gl, "pp-vshader", "ppblury-fshader" );
+    
+    gl.useProgram( ppBlurYProgram );
+    pp_blury_image = gl.getUniformLocation(ppBlurYProgram, "uImage");
+    pp_blury_image_size = gl.getUniformLocation(ppBlurYProgram, "uImageSize");
+    pp_blury_kernel = gl.getUniformLocation(ppBlurYProgram, "uKernel");
+	pp_blury_color = gl.getUniformLocation(ppBlurYProgram, "uColor");
+    
+    pp_blury_position = gl.getAttribLocation(ppBlurYProgram, "vPosition");
+    
+    gl.uniform4f(pp_blury_color, 1.0, 1.0, 1.0, 1.0);
+    gl.uniform1i(pp_blury_image, 0);
+    gl.uniform1fv(pp_blury_kernel, kernel);
+    
+    // Final shader
+    ppFinalProgram = initShaders( gl, "pp-vshader", "ppfinal-fshader" );
+    
+    gl.useProgram( ppFinalProgram );
+    pp_final_image_post = gl.getUniformLocation(ppFinalProgram, "uPost");
+    pp_final_image_orig = gl.getUniformLocation(ppFinalProgram, "uOriginal");
+	pp_final_color = gl.getUniformLocation(ppFinalProgram, "uColor");
+    pp_final_exposure = gl.getUniformLocation(ppFinalProgram, "uExposure");
+    pp_final_position = gl.getAttribLocation(ppFinalProgram, "vPosition");
+    
+    gl.uniform4f(pp_final_color, 1.0, 1.0, 1.0, 1.0);
+    gl.uniform1i(pp_final_image_orig, 0);
+    gl.uniform1i(pp_final_image_post, 1);
+    gl.uniform1f(pp_final_exposure, 1.9);
+    
+    // Primary color buffer
+    pp_fbo_main = gl.createFramebuffer();
+    pp_color_texture = gl.createTexture();
+    pp_depth_buffer = gl.createRenderbuffer();
+    
+    gl.bindTexture(gl.TEXTURE_2D, pp_color_texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    
+    // First pass blur glow
+    pp_fbo_blur_x = gl.createFramebuffer();
+    pp_blur_x_texture = gl.createTexture();
+    
+    gl.bindTexture(gl.TEXTURE_2D, pp_blur_x_texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    
+    // Second pass blur glow
+    pp_fbo_blur_y = gl.createFramebuffer();
+    pp_blur_y_texture = gl.createTexture();
+    
+    gl.bindTexture(gl.TEXTURE_2D, pp_blur_y_texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+function setupBoxBuffer() {
     var box = [
         vec2( 0, 0 ),
-        vec2(  0,  1 ),
-        vec2(  1, 1 ),
-        vec2( 1, 0)
+        vec2( 0, 1 ),
+        vec2( 1, 1 ),
+        vec2( 1, 0 )
     ];
+    var indices = new Uint32Array(6);
+    indices[0] = 0;
+    indices[1] = 3;
+    indices[2] = 2;
+    indices[3] = 2;
+    indices[4] = 1;
+    indices[5] = 0;
     
     // Load the data into the GPU
     boxBuffer = gl.createBuffer();
     gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
     gl.bufferData( gl.ARRAY_BUFFER, flatten(box), gl.STATIC_DRAW );
+    
+    boxIndices = gl.createBuffer();
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, boxIndices );
+    gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW );
+}
+function setupBoxProgram() {
+    // Load shaders and initialize attribute buffers
+    boxProgram = initShaders ( gl, "box-vshader", "box-fshader" );
+    gl.useProgram( boxProgram );
 
     // Associate out shader variables with our data buffer  
     bp_position = gl.getAttribLocation( boxProgram, "vPosition" );
@@ -199,6 +310,7 @@ function setupWaveProgram() {
     gl.uniform4f(wp_color, 1.0, 0.65, 0.8, 1);
 }
 function setupSphereProgram() {
+    modifySphereVertexShader("sphere-vshader", audioElements);
     sphereProgram = initShaders( gl, "sphere-vshader", "sphere-fshader" );
     gl.useProgram(sphereProgram);
     sp_light_dir = gl.getUniformLocation(sphereProgram, "uLightDirection");
@@ -227,7 +339,6 @@ function setupSphereProgram() {
     sp_imp_gradient_colors = gl.getUniformLocation( sphereProgram, "impulseGradientColors" );
     sp_nrm_gradient_colors = gl.getUniformLocation( sphereProgram, "normalGradientColors" );
     
-    
     gl.uniform1f(sp_audio_elements, audioElements);
     
     for ( var i=0;i<audioElements;i++ ) {
@@ -249,7 +360,59 @@ function setupSphereProgram() {
     gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors));
     gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors));
 }
-
+function resizeCanvas() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+    gl.viewport( 0, 0, window.innerWidth, window.innerHeight );
+}
+function resizePostprocess() {
+    var w = canvas.width;
+    var h = canvas.height;
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, pp_fbo_main);
+    gl.bindRenderbuffer(gl.RENDERBUFFER, pp_depth_buffer);
+    gl.bindTexture(gl.TEXTURE_2D, pp_color_texture);
+    
+    pp_fbo_main.width = w;
+    pp_fbo_main.height = h;
+    
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+    
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pp_color_texture, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, pp_depth_buffer);
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, pp_fbo_blur_x);
+    gl.bindTexture(gl.TEXTURE_2D, pp_blur_x_texture);
+    
+    pp_fbo_blur_x.width = w;
+    pp_fbo_blur_x.height = h;
+    
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pp_blur_x_texture, 0);
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, pp_fbo_blur_y);
+    gl.bindTexture(gl.TEXTURE_2D, pp_blur_y_texture);
+    
+    pp_fbo_blur_y.width = w;
+    pp_fbo_blur_y.height = h;
+    
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, pp_blur_y_texture, 0);
+    
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+function drawCall(fbo,draw_function) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
+    
+    draw_function();
+    
+    if ( fbo == null )
+        return null;
+    else
+        return fbo.output;
+}
 function drawBox() {
     gl.depthMask(false);
     gl.useProgram( boxProgram );
@@ -303,6 +466,7 @@ function drawSphere() {
     
     gl.uniformMatrix4fv(sp_model_view, false, flatten(modelViewMatrix) );
     gl.uniformMatrix4fv(sp_projection, false, flatten(projectionMatrix) );
+    
     gl.uniformMatrix3fv(sp_normal_projection, false, flatten(normalViewMatrix) );
         
     gl.uniform3f(sp_light_dir, 0.0, 0.7071, 0.7071);
@@ -324,6 +488,65 @@ function drawSphere() {
     
     gl.disableVertexAttribArray( sp_pos );
     gl.disableVertexAttribArray( sp_uv );
+}
+function drawBlurXPass(texture) {
+    gl.depthMask(false);
+    gl.useProgram( ppBlurXProgram );
+    
+    gl.uniform2f( pp_blurx_image_size, canvas.width, canvas.height );
+    
+    gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, boxIndices );
+    
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    gl.vertexAttribPointer( pp_blurx_position, 2, gl.FLOAT, false, 0, 0 );
+    gl.enableVertexAttribArray( pp_blurx_position );
+    
+    gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0 );
+    
+    gl.disableVertexAttribArray( pp_blurx_position );
+    gl.depthMask(true);
+}
+function drawBlurYPass(texture) {
+    gl.depthMask(false);
+    gl.useProgram( ppBlurYProgram );
+    
+    gl.uniform2f( pp_blury_image_size, canvas.width, canvas.height );
+    
+    gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, boxIndices );
+    
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    gl.vertexAttribPointer( pp_blury_position, 2, gl.FLOAT, false, 0, 0 );
+    gl.enableVertexAttribArray( pp_blury_position );
+    
+    gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0 );
+    
+    gl.disableVertexAttribArray( pp_blury_position );
+    gl.depthMask(true);
+}
+function drawFinalPass(original, post) {
+    gl.depthMask(false);
+    gl.useProgram( ppFinalProgram );
+    
+    gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, boxIndices );
+    
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, post);
+    
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, original);
+
+    gl.vertexAttribPointer( pp_final_position, 2, gl.FLOAT, false, 0, 0 );
+    gl.enableVertexAttribArray( pp_final_position );
+    
+    gl.drawElements( gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0 );
+    
+    gl.disableVertexAttribArray( pp_final_position );
+    gl.depthMask(true);
 }
 
 function createAudioNode( fname ) {
@@ -431,15 +654,8 @@ function processAudio() {
 }
 
 window.onload = initWindow;
-window.onresize = resizeCanvas;
 
 // Utility Functions
-
-function resizeCanvas() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-    gl.viewport( 0, 0, window.innerWidth, window.innerHeight );
-}
 
 function scaleValue(x, div0, div1) {
     if ( x == 0 )

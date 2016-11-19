@@ -46,6 +46,86 @@
         }
     </script>
     
+    <script id="pp-vshader" type="x-shader/x-vertex">
+        attribute vec2 vPosition;
+        
+        varying vec2 fUV;
+
+        void main() {
+            gl_Position = vec4(vPosition * 2.0 - 1.0,0,1);
+            fUV = vPosition;
+        }
+    </script>
+    <script id="ppblurx-fshader" type="x-shader/x-fragment">
+        precision mediump float;
+        
+        uniform sampler2D uImage;
+        uniform vec2 uImageSize;
+        uniform vec2 uDirection;
+        uniform float uKernel[9];
+        uniform vec4 uColor;
+        
+        varying vec2 fUV;
+
+        void main() {
+            vec4 color = vec4(0,0,0,0);
+            color += uKernel[0] * texture2D(uImage, fUV + vec2(-8.5,0) / uImageSize);
+            color += uKernel[1] * texture2D(uImage, fUV + vec2(-6.5,0) / uImageSize);
+            color += uKernel[2] * texture2D(uImage, fUV + vec2(-4.5,0) / uImageSize);
+            color += uKernel[3] * texture2D(uImage, fUV + vec2(-2.5,0) / uImageSize);
+            color += uKernel[4] * texture2D(uImage, fUV + vec2( 0.0,0) / uImageSize);
+            color += uKernel[5] * texture2D(uImage, fUV + vec2( 2.5,0) / uImageSize);
+            color += uKernel[6] * texture2D(uImage, fUV + vec2( 4.5,0) / uImageSize);
+            color += uKernel[7] * texture2D(uImage, fUV + vec2( 6.5,0) / uImageSize);
+            color += uKernel[8] * texture2D(uImage, fUV + vec2( 8.5,0) / uImageSize);
+            gl_FragColor = uColor * color;
+        }
+    </script>
+    <script id="ppblury-fshader" type="x-shader/x-fragment">
+        precision mediump float;
+        
+        uniform sampler2D uImage;
+        uniform vec2 uImageSize;
+        uniform vec2 uDirection;
+        uniform float uKernel[9];
+        uniform vec4 uColor;
+        
+        varying vec2 fUV;
+
+        void main() {
+            vec4 color = vec4(0,0,0,0);
+            color += uKernel[0] * texture2D(uImage, fUV + vec2(0,-8.5) / uImageSize);
+            color += uKernel[1] * texture2D(uImage, fUV + vec2(0,-6.5) / uImageSize);
+            color += uKernel[2] * texture2D(uImage, fUV + vec2(0,-4.5) / uImageSize);
+            color += uKernel[3] * texture2D(uImage, fUV + vec2(0,-2.5) / uImageSize);
+            color += uKernel[4] * texture2D(uImage, fUV + vec2(0, 0.0) / uImageSize);
+            color += uKernel[5] * texture2D(uImage, fUV + vec2(0, 2.5) / uImageSize);
+            color += uKernel[6] * texture2D(uImage, fUV + vec2(0, 4.5) / uImageSize);
+            color += uKernel[7] * texture2D(uImage, fUV + vec2(0, 6.5) / uImageSize);
+            color += uKernel[8] * texture2D(uImage, fUV + vec2(0, 8.5) / uImageSize);
+            gl_FragColor = uColor * color;
+        }
+    </script>
+    <script id="ppfinal-fshader" type="x-shader/x-fragment">
+        precision mediump float;
+        uniform sampler2D uPost;
+        uniform sampler2D uOriginal;
+        uniform vec4 uColor;
+        uniform float uExposure;
+
+        varying vec2 fUV;
+
+        void main() {
+            
+            const float gamma = 2.2;
+            vec4 original = texture2D( uOriginal, fUV );
+            vec4 postproc = texture2D( uPost, fUV );
+            vec3 color = original.rgb + postproc.a * postproc.rgb;
+            vec3 result = pow(vec3(1.0) - exp(-color*uExposure), vec3(1.0 / gamma));
+            gl_FragColor = vec4(result, 1.0);
+        }
+    </script>
+    
     <script id="sphere-vshader" type="x-shader/x-vertex">
         // AUDIO_ELEMENTS will be defined later
         #define M_PI 3.1415926535897932384626433832795
@@ -68,8 +148,7 @@
         varying vec3 fNormal;
         varying vec3 fColor;
         
-        void main()
-        {
+        void main() {
             float theta = vPosition.x;
             float phi = vPosition.y;
             float cosTheta = cos(theta);
@@ -136,11 +215,9 @@
         uniform vec3 uLightDirection;
         uniform vec4 uColor;
 
-        void main()
-        {
+        void main() {
             float stren = clamp(dot(uLightDirection, fNormal), 0.0, 1.0);
-            gl_FragColor = vec4(fCombine * fColor.rgb + (1.0-fCombine) * fColor.rgb * stren, 1.0);
-            //gl_FragColor = vec4(fNormal, 1.0);
+            gl_FragColor = vec4(fCombine * fColor.rgb + (1.0-fCombine) * fColor.rgb * stren, fCombine);
         }
     </script>
     
