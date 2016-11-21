@@ -69,15 +69,15 @@
 
         void main() {
             vec4 color = vec4(0,0,0,0);
-            color += uKernel[0] * texture2D(uImage, fUV + vec2(-8.5,0) / uImageSize);
-            color += uKernel[1] * texture2D(uImage, fUV + vec2(-6.5,0) / uImageSize);
-            color += uKernel[2] * texture2D(uImage, fUV + vec2(-4.5,0) / uImageSize);
-            color += uKernel[3] * texture2D(uImage, fUV + vec2(-2.5,0) / uImageSize);
-            color += uKernel[4] * texture2D(uImage, fUV + vec2( 0.0,0) / uImageSize);
-            color += uKernel[5] * texture2D(uImage, fUV + vec2( 2.5,0) / uImageSize);
-            color += uKernel[6] * texture2D(uImage, fUV + vec2( 4.5,0) / uImageSize);
-            color += uKernel[7] * texture2D(uImage, fUV + vec2( 6.5,0) / uImageSize);
-            color += uKernel[8] * texture2D(uImage, fUV + vec2( 8.5,0) / uImageSize);
+            color += uKernel[0] * texture2D(uImage, fUV + vec2(-8,0) / uImageSize);
+            color += uKernel[1] * texture2D(uImage, fUV + vec2(-6,0) / uImageSize);
+            color += uKernel[2] * texture2D(uImage, fUV + vec2(-4,0) / uImageSize);
+            color += uKernel[3] * texture2D(uImage, fUV + vec2(-2,0) / uImageSize);
+            color += uKernel[4] * texture2D(uImage, fUV + vec2( 0,0) / uImageSize);
+            color += uKernel[5] * texture2D(uImage, fUV + vec2( 2,0) / uImageSize);
+            color += uKernel[6] * texture2D(uImage, fUV + vec2( 4,0) / uImageSize);
+            color += uKernel[7] * texture2D(uImage, fUV + vec2( 6,0) / uImageSize);
+            color += uKernel[8] * texture2D(uImage, fUV + vec2( 8,0) / uImageSize);
             gl_FragColor = uColor * color;
         }
     </script>
@@ -94,15 +94,15 @@
 
         void main() {
             vec4 color = vec4(0,0,0,0);
-            color += uKernel[0] * texture2D(uImage, fUV + vec2(0,-8.5) / uImageSize);
-            color += uKernel[1] * texture2D(uImage, fUV + vec2(0,-6.5) / uImageSize);
-            color += uKernel[2] * texture2D(uImage, fUV + vec2(0,-4.5) / uImageSize);
-            color += uKernel[3] * texture2D(uImage, fUV + vec2(0,-2.5) / uImageSize);
-            color += uKernel[4] * texture2D(uImage, fUV + vec2(0, 0.0) / uImageSize);
-            color += uKernel[5] * texture2D(uImage, fUV + vec2(0, 2.5) / uImageSize);
-            color += uKernel[6] * texture2D(uImage, fUV + vec2(0, 4.5) / uImageSize);
-            color += uKernel[7] * texture2D(uImage, fUV + vec2(0, 6.5) / uImageSize);
-            color += uKernel[8] * texture2D(uImage, fUV + vec2(0, 8.5) / uImageSize);
+            color += uKernel[0] * texture2D(uImage, fUV + vec2(0,-8) / uImageSize);
+            color += uKernel[1] * texture2D(uImage, fUV + vec2(0,-6) / uImageSize);
+            color += uKernel[2] * texture2D(uImage, fUV + vec2(0,-4) / uImageSize);
+            color += uKernel[3] * texture2D(uImage, fUV + vec2(0,-2) / uImageSize);
+            color += uKernel[4] * texture2D(uImage, fUV + vec2(0, 0) / uImageSize);
+            color += uKernel[5] * texture2D(uImage, fUV + vec2(0, 2) / uImageSize);
+            color += uKernel[6] * texture2D(uImage, fUV + vec2(0, 4) / uImageSize);
+            color += uKernel[7] * texture2D(uImage, fUV + vec2(0, 6) / uImageSize);
+            color += uKernel[8] * texture2D(uImage, fUV + vec2(0, 8) / uImageSize);
             gl_FragColor = uColor * color;
         }
     </script>
@@ -116,11 +116,10 @@
         varying vec2 fUV;
 
         void main() {
-            
             const float gamma = 2.2;
             vec4 original = texture2D( uOriginal, fUV );
             vec4 postproc = texture2D( uPost, fUV );
-            vec3 color = original.rgb + postproc.a * postproc.rgb;
+            vec3 color = original.rgb + postproc.a * postproc.a * postproc.rgb;
             vec3 result = pow(vec3(1.0) - exp(-color*uExposure), vec3(1.0 / gamma));
             gl_FragColor = vec4(result, 1.0);
         }
@@ -181,7 +180,7 @@
             fCombine /= 10.0;
             
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position * h, 1);
-            gl_PointSize = 6.0 / (1.0+gl_Position.z);
+            gl_PointSize = h * h * 6.0 / (1.0+gl_Position.z);
             
             fUV = vUV;
             fNormal = normal;
@@ -217,7 +216,7 @@
 
         void main() {
             float stren = clamp(dot(uLightDirection, fNormal), 0.0, 1.0);
-            gl_FragColor = vec4(fCombine * fColor.rgb + (1.0-fCombine) * fColor.rgb * stren, fCombine);
+            gl_FragColor = vec4(fCombine * fColor + (1.0-fCombine) * fColor * stren, fCombine);
         }
     </script>
     
@@ -233,5 +232,7 @@
     <canvas id="GLCanvas">
         Oops ... your browser doesn't support the HTML5 canvas element
     </canvas>
+    <canvas id="TextCanvas">
+    </canvas> 
 </body>
 </html>
