@@ -128,15 +128,15 @@ function initWindow() {
     modifySphereVertexShader("sphere-vshader", audioElements);
     
     var mouseDown = false;
-    canvas.onmousedown = function(e) {
+    document.onmousedown = function(e) {
         if ( e.which == 1 )
             mouseDown = true;
     }
-    canvas.onmouseup = function(e) {
+    document.onmouseup = function(e) {
         if ( e.which == 1 )
             mouseDown = false;
     }
-    canvas.onmousemove = function(e) {
+    document.onmousemove = function(e) {
         if ( mouseDown ) {
             var dx = scaleValue(e.movementX, 18.0, 18.0);
             var dy = scaleValue(e.movementY, 18.0, 18.0);
@@ -148,7 +148,7 @@ function initWindow() {
             rotation = mult( rotation, qr );
         }
     }
-    canvas.onwheel = function(e) {
+    document.onwheel = function(e) {
         var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
         distance = Math.max( 1.5, Math.min(10, distance - delta / 10.0));
     }
@@ -266,7 +266,6 @@ function setupBoxProgram() {
     bp_color = gl.getUniformLocation( boxProgram, "uColor");
     bp_projection = gl.getUniformLocation( boxProgram, "uProjection");
     bp_model_view = gl.getUniformLocation( boxProgram, "uModelView");
-    gl.uniform4f( bp_color,1,1,1,0.2 );
 }
 
 function setupWaveProgram() {
@@ -339,11 +338,19 @@ function setupSphereProgram() {
 
 function drawBox() {
     gl.depthMask(false);
-    gl.useProgram( boxProgram );    
+    gl.useProgram( boxProgram ); 
+    gl.uniform4f( bp_color,1,1,1,0.2 );
 
     gl.bindBuffer( gl.ARRAY_BUFFER, progressBarBuffer );
     gl.vertexAttribPointer( bp_position, 2, gl.FLOAT, false, 0, 0 );
     gl.enableVertexAttribArray( bp_position );
+    for (var j=0; j<boxes.length; j++) {
+        if (boxes[j][5]) {
+            if (! (audioNodes[j].audioNode.paused))
+                var playing = j;
+        }
+    }
+        
     for (var i=0; i<boxes.length; i++) {
         if (boxes[i][5]) {
             var x = boxes[i][0];
@@ -358,11 +365,22 @@ function drawBox() {
             
             var progressBarArray = progressBar ( i );
             if ( progressBarArray ) {
+                var color;
+                if (playing>=0) {
+                    if (i%2) { //odd number
+                        color = normalColors[playing][(i-1)/2]
+                    } else {
+                        color = impulseColors[playing][(i)/2]  
+                    }
+                    gl.uniform4f( bp_color,color[0],color[1],color[2],0.2 ); 
+                }  
                 gl.bufferSubData( gl.ARRAY_BUFFER, 0, flatten(progressBarArray) );
                 gl.drawArrays( gl.TRIANGLE_STRIP, 0, flatten(progressBarArray).length/2);
             }
         }
     }
+
+    gl.uniform4f( bp_color,1,1,1,0.5 );
     
     gl.bindBuffer( gl.ARRAY_BUFFER, boxBuffer );
     gl.vertexAttribPointer( bp_position, 2, gl.FLOAT, false, 0, 0 );
@@ -379,6 +397,15 @@ function drawBox() {
         var boxModelView = mult( translate( x,y,0 ), scalem(w,h,1) );
         gl.uniformMatrix4fv ( bp_model_view, false, flatten(boxModelView) ); 
 
+        var col;
+        if (playing>=0) {
+            if (i%2) { //odd number
+                col = normalColors[playing][(i-1)/2]
+            } else {
+                col = impulseColors[playing][(i)/2]  
+            }
+            gl.uniform4f( bp_color,col[0],col[1],col[2],0.7 ); 
+        }  
         gl.drawArrays( gl.LINE_LOOP, 0, 6 );
     }
 
@@ -621,12 +648,8 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
 function drawText ( name, num ) {
     var ctx = textCanvas.getContext('2d');
     ctx.font = "18px sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    
-    if (name.length > 22)
-        ctx.fillText(name.substring(0,20), 30 + 175*((num)%2), 15*(num+2) + 90*(num+1) -10 );
-    else
-        ctx.fillText(name, 30 + 175*((num)%2), 15*(num+2) + 90*(num+1) -10 );
+    ctx.fillStyle = "rgba(255,255,255,1)";
+    ctx.fillText(name, 30 + 175*((num)%2), 15*(num+2) + 90*(num+1) -10, 170 );
 } 
 
 function progressBar ( num ) {
