@@ -18,23 +18,42 @@ var rotation = translate(0,0,0);
 
 var responseValue = 0.25;
 
-var latBands = 128;
-var lonBands = 128;
-
-var audioElements = 256;
 var audioConstElements = 1024;
-var audioIncrement = 1024 / audioElements;
-var audioBlurSize = audioIncrement;
+var innerSphere = {
+    latBands : 32,
+    lonBands : 32,
+    audioElements : 16,
+    vertex : null,
+    indices : null
+};
+innerSphere.audioIncrement = audioConstElements / innerSphere.audioElements;
+innerSphere.audioBlurSize = innerSphere.audioIncrement;
+innerSphere.audioFrequencyData = new Uint8Array(audioConstElements);
+innerSphere.bufferWave = new Float32Array(2 * audioConstElements);
+innerSphere.bufferData = new Float32Array(audioConstElements);
+innerSphere.bufferImpulse = new Float32Array(audioConstElements);
+innerSphere.bufferBump = new Float32Array(3 * audioConstElements);
+innerSphere.bufferBumpRotation = [];
+
+
+var outerSphere = {
+    latBands : 64,
+    lonBands : 64,
+    audioElements : 256,
+    vertex : null,
+    indices : null
+};
+outerSphere.audioIncrement = audioConstElements / outerSphere.audioElements;
+outerSphere.audioBlurSize = outerSphere.audioIncrement;
+outerSphere.audioFrequencyData = new Uint8Array(audioConstElements);
+outerSphere.bufferWave = new Float32Array(2 * audioConstElements);
+outerSphere.bufferData = new Float32Array(audioConstElements);
+outerSphere.bufferImpulse = new Float32Array(audioConstElements);
+outerSphere.bufferBump = new Float32Array(3 * audioConstElements);
+outerSphere.bufferBumpRotation = [];
 
 var audioNodes = [];
 var audioCurrentNode = null;
-var audioFrequencyData = new Uint8Array(audioConstElements);
-
-var bufferWave = new Float32Array(2 * audioConstElements);
-var bufferData = new Float32Array(audioConstElements);
-var bufferImpulse = new Float32Array(audioConstElements);
-var bufferBump = new Float32Array(3 * audioConstElements);
-var bufferBumpRotation = [];
 
 var boxes = [];
 
@@ -185,13 +204,14 @@ function initInputs() {
 function initAudio() {
     function renderFrame() {
         window.requestAnimationFrame(renderFrame);
+        
         if ( audioCurrentNode != null ) {
-            audioCurrentNode.getFrequencyData(audioFrequencyData);
-        } else {
-            for ( var i=0;i<audioConstElements;i++ )
-                audioFrequencyData[i] = 0;
+            audioCurrentNode.getTimeDomainData(innerSphere.audioFrequencyData);
+            audioCurrentNode.getFrequencyData(outerSphere.audioFrequencyData);
         }
-        processAudio();
+        
+        processAudio(sphereInnerProgram, sip, innerSphere);
+        processAudio(sphereOuterProgram, sop, outerSphere);
     }
     
     renderFrame();
@@ -216,7 +236,8 @@ function initGL() {
             gl.clearColor( 0.0, 0.0, 0.0, 0.0 );
             drawCall(pp_fbo_main, function() {
                 //drawWave();
-                drawSphere();
+                drawSphere(sphereInnerProgram, sip, innerSphere, false);
+                drawSphere(sphereOuterProgram, sop, outerSphere, true);
             });
             drawCall(pp_fbo_blur_x, function() {
                 drawBlurXPass(pp_color_texture);
@@ -240,7 +261,7 @@ function initGL() {
             gl.clearColor( 0.0, 0.0, 0.0, 1.0 );
             drawCall(null, function() {
                 //drawWave();
-                drawSphere();
+                drawSphere(sphereOuterProgram, sop, outerSphere, true);
             });
             /*drawCall(null, function() {
                 drawFinalPass(pp_color_texture, pp_color_texture);
@@ -381,7 +402,7 @@ function setupBoxProgram() {
     gl.uniform4f( bp_color,1,1,1,1 );
 }
 
-function setupWaveProgram() {
+function setupWaveProgram(sphereDef) {
     //  Load shaders and initialize attribute buffers
     waveProgram = initShaders( gl, "wave-vshader", "wave-fshader" );
     gl.useProgram( waveProgram );
@@ -390,63 +411,81 @@ function setupWaveProgram() {
     // Load the data into the GPU
     waveBuffer = gl.createBuffer();
     gl.bindBuffer( gl.ARRAY_BUFFER, waveBuffer );
-    gl.bufferData( gl.ARRAY_BUFFER, bufferWave, gl.DYNAMIC_DRAW );
+    gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(audioConstElements), gl.DYNAMIC_DRAW );
 
     // Associate out shader variables with our data buffer  
     wp_position = gl.getAttribLocation( waveProgram, "vPosition" );
     
     gl.uniform4f(wp_color, 1.0, 0.65, 0.8, 1);
 }
-function setupSphereProgram() {
-    modifySphereVertexShader("sphere-vshader", audioElements);
-    sphereProgram = initShaders( gl, "sphere-vshader", "sphere-fshader" );
-    gl.useProgram(sphereProgram);
-    sp_light_dir = gl.getUniformLocation(sphereProgram, "uLightDirection");
+function setupSphere(sphereDef, program, size, h, spd) {
+    var obj = new Object();
     
-    sp_model_view = gl.getUniformLocation( sphereProgram, "modelViewMatrix" );
-    sp_projection = gl.getUniformLocation( sphereProgram, "projectionMatrix" );
-    sp_normal_projection = gl.getUniformLocation( sphereProgram, "normalMatrix" );
+    gl.useProgram(program);
+    obj.light_dir = gl.getUniformLocation(program, "uLightDirection");
     
-    var sphereData = generatePTSphere(0.1,latBands,lonBands);
+    obj.model_view = gl.getUniformLocation( program, "modelViewMatrix" );
+    obj.projection = gl.getUniformLocation( program, "projectionMatrix" );
+    obj.normal_projection = gl.getUniformLocation( program, "normalMatrix" );
     
-    sphereVertexBuffer = gl.createBuffer();
-    sphereIndexBuffer = gl.createBuffer();
+    var sphereData = generatePTSphere(0.1,sphereDef.latBands,sphereDef.lonBands);
     
-    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertexBuffer );
+    sphereDef.vertex = gl.createBuffer();
+    sphereDef.indices = gl.createBuffer();
+    
+    gl.bindBuffer( gl.ARRAY_BUFFER, sphereDef.vertex );
     gl.bufferData( gl.ARRAY_BUFFER, sphereData[0], gl.STATIC_DRAW );
     
-    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereDef.indices );
     gl.bufferData( gl.ELEMENT_ARRAY_BUFFER, sphereData[1], gl.STATIC_DRAW );
     
-    sp_pos = gl.getAttribLocation( sphereProgram, "vPosition" );
-    sp_uv = gl.getAttribLocation( sphereProgram, "vUV" );
-    sp_audio_elements = gl.getUniformLocation( sphereProgram, "audioElements" );
-    sp_audio_data = gl.getUniformLocation( sphereProgram, "audioData" );
-    sp_audio_impulse = gl.getUniformLocation( sphereProgram, "audioImpulse" );
-    sp_audio_bumps = gl.getUniformLocation( sphereProgram, "audioBumps" );
-    sp_imp_gradient_colors = gl.getUniformLocation( sphereProgram, "impulseGradientColors" );
-    sp_nrm_gradient_colors = gl.getUniformLocation( sphereProgram, "normalGradientColors" );
+    obj.pos = gl.getAttribLocation( program, "vPosition" );
+    obj.uv = gl.getAttribLocation( program, "vUV" );
+    obj.audio_elements = gl.getUniformLocation( program, "audioElements" );
+    obj.audio_data = gl.getUniformLocation( program, "audioData" );
+    obj.audio_impulse = gl.getUniformLocation( program, "audioImpulse" );
+    obj.audio_bumps = gl.getUniformLocation( program, "audioBumps" );
+    obj.base_height = gl.getUniformLocation( program, "baseHeight" );
+    obj.base_point_size = gl.getUniformLocation( program, "basePointSize" );
+    obj.height0 = gl.getUniformLocation( program, "heightScale0" );
+    obj.height1 = gl.getUniformLocation( program, "heightScale1" );
     
-    gl.uniform1f(sp_audio_elements, audioElements);
+    obj.imp_gradient_colors = gl.getUniformLocation( program, "impulseGradientColors" );
+    obj.nrm_gradient_colors = gl.getUniformLocation( program, "normalGradientColors" );
     
-    for ( var i=0;i<audioElements;i++ ) {
+    gl.uniform1f(obj.audio_elements, sphereDef.audioElements);
+    gl.uniform1f(obj.base_height, size);
+    gl.uniform1f(obj.base_point_size, 8.0);
+    gl.uniform1f(obj.height0, h*h);
+    gl.uniform1f(obj.height1, h);
+    
+    for ( var i=0;i<sphereDef.audioElements;i++ ) {
         var bum = randomVector();
         var rot = randomVector();
         
-        bufferWave[i*2+0] = i / audioElements * 1.8 - 0.9;
-        bufferWave[i*2+1] = -0.9;
-        bufferImpulse[i] = 0.0;
+        sphereDef.bufferWave[i*2+0] = i / sphereDef.audioElements * 1.8 - 0.9;
+        sphereDef.bufferWave[i*2+1] = -0.9;
+        sphereDef.bufferImpulse[i] = 0.0;
         
-        bufferBump[i*3+0] = bum[0];
-        bufferBump[i*3+1] = bum[1];
-        bufferBump[i*3+2] = bum[2];
+        sphereDef.bufferBump[i*3+0] = bum[0];
+        sphereDef.bufferBump[i*3+1] = bum[1];
+        sphereDef.bufferBump[i*3+2] = bum[2];
         
-        bufferBumpRotation.push( [rot[0], rot[1], rot[2], randomValue() / 10.0] );
+        sphereDef.bufferBumpRotation.push( [rot[0], rot[1], rot[2], randomValue() / spd] );
     }
     
-    gl.uniform3fv(sp_audio_bumps, bufferBump);
-    gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors[0]));
-    gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors[0]));
+    gl.uniform3fv(obj.audio_bumps, sphereDef.bufferBump);
+    gl.uniform3fv(obj.nrm_gradient_colors, flatten(normalColors[0]));
+    gl.uniform3fv(obj.imp_gradient_colors, flatten(impulseColors[0]));
+    
+    return obj;
+}
+function setupSphereProgram() {
+    sphereInnerProgram = modifySphereVertexShader("sphere-vshader", innerSphere.audioElements);
+    sphereOuterProgram = modifySphereVertexShader("sphere-vshader", outerSphere.audioElements);
+    
+    sip = setupSphere(innerSphere, sphereInnerProgram, 0.25, 2.0,  100.0);
+    sop = setupSphere(outerSphere, sphereOuterProgram, 1.0, 10.0, 10.0);
 }
 function resizeCanvas() {
     canvas.width  = window.innerWidth;
@@ -546,38 +585,38 @@ function drawWave() {
     gl.depthMask(true);
 }
 
-function drawSphere() {
+function drawSphere(program, unifs, sphereDef, points) {
     //var modelViewMatrix = rotation;
     var modelViewMatrix = mult( translate(0,0,-distance), rotation );
     var projectionMatrix = perspective(70, window.innerWidth / window.innerHeight, 0.1, 100.0);
     var normalViewMatrix = normalMatrix(modelViewMatrix);
     
-    gl.useProgram(sphereProgram);
+    gl.useProgram(program);
     
-    gl.uniformMatrix4fv(sp_model_view, false, flatten(modelViewMatrix) );
-    gl.uniformMatrix4fv(sp_projection, false, flatten(projectionMatrix) );
+    gl.uniformMatrix4fv(unifs.model_view, false, flatten(modelViewMatrix) );
+    gl.uniformMatrix4fv(unifs.projection, false, flatten(projectionMatrix) );
     
-    gl.uniformMatrix3fv(sp_normal_projection, false, flatten(normalViewMatrix) );
+    gl.uniformMatrix3fv(unifs.normal_projection, false, flatten(normalViewMatrix) );
         
-    gl.uniform3f(sp_light_dir, 0.0, 0.7071, 0.7071);
+    gl.uniform3f(unifs.light_dir, 0.0, 0.7071, 0.7071);
     
-    gl.bindBuffer( gl.ARRAY_BUFFER, sphereVertexBuffer );
-    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereIndexBuffer );
+    gl.bindBuffer( gl.ARRAY_BUFFER, sphereDef.vertex );
+    gl.bindBuffer( gl.ELEMENT_ARRAY_BUFFER, sphereDef.indices );
     
-    gl.vertexAttribPointer( sp_pos, 2, gl.FLOAT, false, 16, 0 );
-    gl.enableVertexAttribArray( sp_pos );
+    gl.vertexAttribPointer( unifs.pos, 2, gl.FLOAT, false, 16, 0 );
+    gl.enableVertexAttribArray( unifs.pos );
     
-    gl.vertexAttribPointer( sp_uv, 2, gl.FLOAT, false, 16, 8 );
-    gl.enableVertexAttribArray( sp_uv );
+    gl.vertexAttribPointer( unifs.uv, 2, gl.FLOAT, false, 16, 8 );
+    gl.enableVertexAttribArray( unifs.uv );
     
-    if ( displayPoints ) {
-        gl.drawArrays( gl.POINTS, 0, 2 + latBands * lonBands );
+    if ( points ) {
+        gl.drawArrays( gl.POINTS, 0, 2 + sphereDef.latBands * sphereDef.lonBands );
     } else {
-        gl.drawElements( gl.TRIANGLES, 6 * latBands * lonBands, gl.UNSIGNED_INT, 0 );
+        gl.drawElements( gl.TRIANGLES, 6 * sphereDef.latBands * sphereDef.lonBands, gl.UNSIGNED_INT, 0 );
     }
     
-    gl.disableVertexAttribArray( sp_pos );
-    gl.disableVertexAttribArray( sp_uv );
+    gl.disableVertexAttribArray( unifs.pos );
+    gl.disableVertexAttribArray( unifs.uv );
 }
 function drawBlurXPass(texture) {
     gl.depthMask(false);
@@ -660,6 +699,9 @@ function createAudioNode( fname ) {
     ret.getFrequencyData = function(data) {
         this.analyser.getByteFrequencyData(data);
     };
+    ret.getTimeDomainData = function(data) {
+        this.analyser.getByteTimeDomainData(data);
+    };
     ret.play = function() {
         this.audioNode.play();
     };
@@ -681,41 +723,41 @@ function createAudioNode( fname ) {
     
     return ret;
 }
-function processAudio() {
-    for (var i=0, aud=0; i<audioConstElements; i+=audioIncrement, aud++) {
+function processAudio(program, unifs, sphereDef) {
+    for (var i=0, aud=0; i<audioConstElements; i+=sphereDef.audioIncrement, aud++) {
         var counted = 0;
         var unscaled = 0;
-        for ( var j=-audioBlurSize;j<=audioBlurSize;j++ ) {
+        for ( var j=-sphereDef.audioBlurSize;j<=sphereDef.audioBlurSize;j++ ) {
             var ij = i + j;
             if ( ij < 0 || ij >= audioConstElements )
                 continue;
-            unscaled += audioFrequencyData[ij];
+            unscaled += sphereDef.audioFrequencyData[ij];
             counted += 1;
         }
         var height = unscaled / counted;
         var scaled_h = responseValue * height / 255.0;
         
-        var newWave = scaled_h + bufferWave[aud*2+1] * (1.0-responseValue);
-        var newData = scaled_h * 0.25 + bufferData[aud] * (1.0-responseValue);
+        var newWave = scaled_h + sphereDef.bufferWave[aud*2+1] * (1.0-responseValue);
+        var newData = scaled_h * 0.25 + sphereDef.bufferData[aud] * (1.0-responseValue);
         
-        if ( newData > bufferData[aud] )
-            bufferImpulse[aud] = Math.min(1.1 * bufferImpulse[aud] + 0.1, 1.0 );
+        if ( newData > sphereDef.bufferData[aud] )
+            sphereDef.bufferImpulse[aud] = Math.min(1.1 * sphereDef.bufferImpulse[aud] + 0.1, 1.0 );
         else
-            bufferImpulse[aud] = 0.9 * bufferImpulse[aud];
+            sphereDef.bufferImpulse[aud] = 0.9 * sphereDef.bufferImpulse[aud];
         
-        bufferWave[aud*2+1] = newWave;
-        bufferData[aud]     = newData;
+        sphereDef.bufferWave[aud*2+1] = newWave;
+        sphereDef.bufferData[aud]     = newData;
     }
     
-    for ( var i=0;i<audioElements;i++ ) {
-        var xa = bufferBumpRotation[i][0];
-        var ya = bufferBumpRotation[i][1];
-        var za = bufferBumpRotation[i][2];
-        var theta = bufferBumpRotation[i][3];
+    for ( var i=0;i<sphereDef.audioElements;i++ ) {
+        var xa = sphereDef.bufferBumpRotation[i][0];
+        var ya = sphereDef.bufferBumpRotation[i][1];
+        var za = sphereDef.bufferBumpRotation[i][2];
+        var theta = sphereDef.bufferBumpRotation[i][3];
         
-        var xp = bufferBump[i*3+0];
-        var yp = bufferBump[i*3+1];
-        var zp = bufferBump[i*3+2];
+        var xp = sphereDef.bufferBump[i*3+0];
+        var yp = sphereDef.bufferBump[i*3+1];
+        var zp = sphereDef.bufferBump[i*3+2];
         
         var a = vec3(xa,ya,za);
         var p = vec3(xp,yp,zp);
@@ -732,15 +774,15 @@ function processAudio() {
         var zf = zp * cos + vdot * za * inv_cos + vcross[2] * sin;
         var wf = Math.sqrt(xf*xf+yf*yf+zf*zf);
         
-        bufferBump[i*3+0] = xf / wf;
-        bufferBump[i*3+1] = yf / wf;
-        bufferBump[i*3+2] = zf / wf;
+        sphereDef.bufferBump[i*3+0] = xf / wf;
+        sphereDef.bufferBump[i*3+1] = yf / wf;
+        sphereDef.bufferBump[i*3+2] = zf / wf;
     }
     
-    gl.useProgram(sphereProgram);
-    gl.uniform1fv(sp_audio_data, bufferData);
-    gl.uniform1fv(sp_audio_impulse, bufferImpulse);
-    gl.uniform3fv(sp_audio_bumps, bufferBump);
+    gl.useProgram(program);
+    gl.uniform1fv(unifs.audio_data, sphereDef.bufferData);
+    gl.uniform1fv(unifs.audio_impulse, sphereDef.bufferImpulse);
+    gl.uniform3fv(unifs.audio_bumps, sphereDef.bufferBump);
 }
 
 window.onload = initWindow;
@@ -779,8 +821,12 @@ function randomVector() {
 
 function modifySphereVertexShader(idName, count) {            
     var script = document.getElementById("sphere-vshader");
+    var old = script.innerHTML;
     script.innerHTML = "#define AUDIO_ELEMENTS " + count.toString() + "\r\n" +
                         script.innerHTML;
+    var shad = initShaders( gl, "sphere-vshader", "sphere-fshader" );
+    script.innerHTML = old;
+    return shad;
 }
 
 function boxClick( num ) {  //takes in the index of the box that was clicked
@@ -808,7 +854,12 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
     }   
     else {
         boxes[num][5].makeCurrent();
-    }    
-    gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors[num]));
-    gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors[num]));
+    }
+    gl.useProgram(sphereInnerProgram);
+    gl.uniform3fv(sip.nrm_gradient_colors, flatten(normalColors[num]));
+    gl.uniform3fv(sip.imp_gradient_colors, flatten(impulseColors[num]));
+    
+    gl.useProgram(sphereOuterProgram);
+    gl.uniform3fv(sop.nrm_gradient_colors, flatten(normalColors[num]));
+    gl.uniform3fv(sop.imp_gradient_colors, flatten(impulseColors[num]));
 }

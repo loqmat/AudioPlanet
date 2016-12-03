@@ -138,6 +138,10 @@
         uniform mat4 modelViewMatrix;
         uniform mat4 projectionMatrix;
         uniform mat3 normalMatrix;
+        uniform float baseHeight;
+        uniform float basePointSize;
+        uniform float heightScale0;
+        uniform float heightScale1;
         
         attribute vec2 vPosition;
         attribute vec2 vUV;
@@ -159,7 +163,7 @@
             vec3 normal = position;
             
             fCombine = 0.0;
-            float h = 0.5;
+            float h = baseHeight;
             float gauss_scale = float(AUDIO_ELEMENTS)/4.0;
             
             for ( int i=0;i<AUDIO_ELEMENTS;i++ ) {
@@ -172,7 +176,7 @@
                 //normal += (1.0-difer) * audioBumps[i] + difer * position;
                 
                 float height = audioData[i] * gauss;
-                h += (100.0 * height * height) / 10.0;
+                h += (heightScale0 * height * height) / heightScale1;
                 fCombine += audioImpulse[i] * gauss;
             }
             
@@ -180,7 +184,7 @@
             fCombine /= 10.0;
             
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position * h, 1);
-            gl_PointSize = h * h * 6.0 / (1.0+gl_Position.z);
+            gl_PointSize = h * h * basePointSize / (1.0+gl_Position.z);
             
             fUV = vUV;
             fNormal = normal;
@@ -216,7 +220,8 @@
 
         void main() {
             float stren = clamp(dot(uLightDirection, fNormal), 0.0, 1.0);
-            gl_FragColor = vec4(fCombine * fColor + (1.0-fCombine) * fColor * stren, fCombine);
+            float glow = max(fCombine - 0.5, 0.0) * 2.0;
+            gl_FragColor = vec4(fCombine * fColor + (1.0-fCombine) * fColor * stren, glow * glow);
         }
     </script>
     
