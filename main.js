@@ -127,6 +127,70 @@ function initWindow() {
     
     modifySphereVertexShader("sphere-vshader", audioElements);
     
+    var mouseDown = false; 
+    var flag;
+    var clickedObject = 6;  //initialize clicked object to a number not corresponding to any possible box index
+    document.addEventListener("mousedown", function() {
+        flag = 0;
+        if ( e.which == 1 ) {   //left mouse button down
+            mouseDown = true;
+            //iterate through all input boxes
+            for (var i = 0; i < boxes.length; i++) {
+
+                // width and height of bounding box
+                var hori = boxes[i][2]/2.0;
+                var vert = boxes[i][3]/4.0;
+                //center of hexagon
+                var centerx = boxes[i][0] + (boxes[i][2]/2.0)
+                var centery = boxes[i][1] + (boxes[i][3]/2.0)
+
+                // transform the test point locally and to quadrant 2
+                var pointx = Math.abs(event.x - centerx );        
+                var pointy = Math.abs(event.y - centery );
+
+                //check if point is within bounding box  &  against the corners
+                if ( !(pointx > hori*2 || pointy > vert) && (2*vert*hori - vert*pointx - 2*hori*pointy >= 0))
+                    clickedObject = i
+            } 
+        }
+    }, false);
+    
+    document.addEventListener("mousemove", function() {
+        flag = 1;   //<===put bounds on it 
+        if ( mouseDown && (clickedObject == 6) ) {
+            var dx = scaleValue(e.movementX, 18.0, 18.0);
+            var dy = scaleValue(e.movementY, 18.0, 18.0);
+            
+            var qx = rotate(rad2deg(dx), vec3(0.0, 1.0, 0.0));
+            var qy = rotate(rad2deg(dy), vec3(1.0, 0.0, 0.0));
+            var qr = mult( qx, qy );
+            
+            rotation = mult( rotation, qr );
+        } else if ( mouseDown && (clickedObject != 6) ) {
+            //drag box
+        }
+        
+    }, false);
+
+    document.addEventListener("onmouseleave", function(){
+        if ( e.which == 1 && clickedObject != 6 ) //if was dragging object
+            //reset to original position 
+    }, false);
+
+    document.addEventListener("mouseup", function(){
+        if ( e.which == 1 ) {
+            mouseDown = false;    
+            //if mouse up after drag
+            if(  ( clickedObject != 6 && flag == 1) ){
+                //make new coordinates perma coordinates
+            }
+            //if mouse click 
+            else if( clickedObject != 6 && flag == 0) {
+                boxes[i][4]( i );   //call to onclick function
+            }
+        }
+    }, false);
+
     var mouseDown = false;
     document.onmousedown = function(e) {
         if ( e.which == 1 )
@@ -137,16 +201,7 @@ function initWindow() {
             mouseDown = false;
     }
     document.onmousemove = function(e) {
-        if ( mouseDown ) {
-            var dx = scaleValue(e.movementX, 18.0, 18.0);
-            var dy = scaleValue(e.movementY, 18.0, 18.0);
-            
-            var qx = rotate(rad2deg(dx), vec3(0.0, 1.0, 0.0));
-            var qy = rotate(rad2deg(dy), vec3(1.0, 0.0, 0.0));
-            var qr = mult( qx, qy );
-            
-            rotation = mult( rotation, qr );
-        }
+        
     }
     document.onwheel = function(e) {
         var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
@@ -155,22 +210,6 @@ function initWindow() {
     
     initGL();
     initAudio();
-
-    document.addEventListener('mousedown', function(event) {
-        console.log(event);
-        for (var i = 0; i < boxes.length; i++) {
-
-            var pointx = Math.abs(event.x - (boxes[i][0] + (boxes[i][2]/2.0)) );        
-            var pointy = Math.abs(event.y - (boxes[i][1] + (boxes[i][3]/2.0)) );
-
-            if ( !(pointx > (boxes[i][2]/2.0) || pointy > (boxes[i][3]/2.0)) ||
-            ((boxes[i][3]/2.0) * (boxes[i][2]/2.0) - (boxes[i][3]/2.0) * pointx - (boxes[i][2]/2.0) * pointy >= 0) )
-            {
-                boxes[i][4]( i );
-                console.log ("box:", i);
-            }
-        }
-    })
     
     document.addEventListener('keydown', function(event) {
         if ( event.keyCode == 32 ) {
@@ -639,9 +678,15 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
         fopen.click();  
     }   
     else {
-        boxes[num][5].makeCurrent();
-        gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors[num]));
-        gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors[num]));
+        var audioNode = boxes[num][5]; 
+        if (!(audioNode.audioNode.paused)) {
+            console.log(num)
+            audioNode.pause()
+        } else {
+            audioNode.makeCurrent(); 
+            gl.uniform3fv(sp_nrm_gradient_colors, flatten(normalColors[num]));
+            gl.uniform3fv(sp_imp_gradient_colors, flatten(impulseColors[num])); 
+        }      
     }    
 }
 
