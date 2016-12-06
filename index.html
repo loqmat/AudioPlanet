@@ -119,7 +119,9 @@
             const float gamma = 2.2;
             vec4 original = texture2D( uOriginal, fUV );
             vec4 postproc = texture2D( uPost, fUV );
+            
             vec3 color = original.rgb + postproc.a * postproc.a * postproc.rgb;
+            
             vec3 result = pow(vec3(1.0) - exp(-color*uExposure), vec3(1.0 / gamma));
             gl_FragColor = vec4(result, 1.0);
         }
@@ -220,8 +222,29 @@
 
         void main() {
             float stren = clamp(dot(uLightDirection, fNormal), 0.0, 1.0);
-            float glow = max(fCombine - 0.5, 0.0) * 2.0;
+            float glow = max(fCombine - 0.85, 0.0);
             gl_FragColor = vec4(fCombine * fColor + (1.0-fCombine) * fColor * stren, glow * glow);
+        }
+    </script>
+    
+    <script id="mirror-vshader" type="x-shader/x-vertex">
+        uniform mat4 modelViewMatrix;
+        uniform mat4 projectionMatrix;
+        
+        attribute vec3 vPosition;
+        
+        void main() {
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(vPosition, 1);
+        }
+    </script>
+    
+    <script id="mirror-fshader" type="x-shader/x-fragment">
+        precision mediump float;
+        
+        uniform vec4 uColor;
+        
+        void main() {
+            gl_FragColor = uColor;
         }
     </script>
     
@@ -229,6 +252,13 @@
     <script type="text/javascript" src="./lib/initShaders.js"></script>
     <script type="text/javascript" src="./lib/MV.js"></script>
     <script type="text/javascript" src="./generateSphere.js"></script>
+    <script type="text/javascript" src="./util.js"></script>
+    <script type="text/javascript" src="./data.js"></script>
+    <script type="text/javascript" src="./audio.js"></script>
+    <script type="text/javascript" src="./setup.js"></script>
+    <script type="text/javascript" src="./resize.js"></script>
+    <script type="text/javascript" src="./draw.js"></script>
+    <script type="text/javascript" src="./ui.js"></script>
     <script type="text/javascript" src="./main.js"></script>
     <link rel="stylesheet" type="text/css" href="main.css">
 </head>
