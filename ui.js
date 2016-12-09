@@ -96,6 +96,7 @@ function drawBox() {
 }
 
 function boxClick( num ) {  //takes in the index of the box that was clicked
+
     if ( boxes[num][5] == null ) {
         var fopen = document.getElementById("loadFile");
         fopen.onchange = function(event) {
@@ -105,10 +106,6 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
             audioNode.makeCurrent();
             var songName = fopen.files[0].name.substring(0,fopen.files[0].name.length-4);
             songNames.push ( songName );
-            drawText( songName, num );
-            if ( boxes.length < 6 ) {
-                boxes.push( [15 + 175*((num+1)%2), 15*(num+2) + 90*(num+1), 200, 180, boxClick, null] );
-            }
             
             gl.useProgram(sphereInnerProgram);
             gl.uniform3fv(sip.nrm_gradient_colors, flatten(normalColors[num]));
@@ -117,19 +114,29 @@ function boxClick( num ) {  //takes in the index of the box that was clicked
             gl.useProgram(sphereOuterProgram);
             gl.uniform3fv(sop.nrm_gradient_colors, flatten(normalColors[num]));
             gl.uniform3fv(sop.imp_gradient_colors, flatten(impulseColors[num]));
+            
+            drawText( songName, num );
+            if ( boxes.length < 6 ) {
+                boxes.push( [15 + 175*((num+1)%2), 15*(num+2) + 90*(num+1), 200, 180, boxClick, null] );
+            }
         }
         fopen.click();  
     }   
     else {
-        boxes[num][5].makeCurrent();
-        
-        gl.useProgram(sphereInnerProgram);
-        gl.uniform3fv(sip.nrm_gradient_colors, flatten(normalColors[num]));
-        gl.uniform3fv(sip.imp_gradient_colors, flatten(impulseColors[num]));
-        
-        gl.useProgram(sphereOuterProgram);
-        gl.uniform3fv(sop.nrm_gradient_colors, flatten(normalColors[num]));
-        gl.uniform3fv(sop.imp_gradient_colors, flatten(impulseColors[num]));
+        var audioNode = boxes[num][5]; 
+        if (!(audioNode.audioNode.paused)) {
+            console.log(num)
+            audioNode.pause()
+        } else {
+            audioNode.makeCurrent(); 
+            gl.useProgram(sphereInnerProgram);
+            gl.uniform3fv(sip.nrm_gradient_colors, flatten(normalColors[num]));
+            gl.uniform3fv(sip.imp_gradient_colors, flatten(impulseColors[num]));
+            
+            gl.useProgram(sphereOuterProgram);
+            gl.uniform3fv(sop.nrm_gradient_colors, flatten(normalColors[num]));
+            gl.uniform3fv(sop.imp_gradient_colors, flatten(impulseColors[num]));
+        }
     }
 }
 
